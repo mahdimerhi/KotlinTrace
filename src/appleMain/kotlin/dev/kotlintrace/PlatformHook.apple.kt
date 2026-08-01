@@ -2,13 +2,21 @@
 
 package dev.kotlintrace
 
+import kotlin.concurrent.Volatile
 import kotlin.experimental.ExperimentalNativeApi
+import kotlin.native.setUnhandledExceptionHook
 
 @OptIn(ExperimentalNativeApi::class)
 internal actual object PlatformHook {
-    private var options: KotlinTraceOptions? = null
+    @Volatile
+    private var previousHook: ((Throwable) -> Unit)? = null
 
     internal actual fun install(options: KotlinTraceOptions) {
-        this.options = options
+        if (previousHook != null) return
+        previousHook = setUnhandledExceptionHook { throwable ->
+            // Swallow reporter failures so only the original crash can terminate the app.
+            runCatching { KotlinTraceReporter.report(throwable, KotlinTrace.installedBackends) }
+            previousHook?.invoke(throwable)
+        }
     }
 }

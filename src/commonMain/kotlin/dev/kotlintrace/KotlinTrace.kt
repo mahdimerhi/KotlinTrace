@@ -4,13 +4,22 @@ package dev.kotlintrace
 
 import kotlin.concurrent.Volatile
 
-public object KotlinTrace {
+object KotlinTrace {
     @Volatile
-    private var installed = false
+    private var hookInstalled = false
 
-    public fun install(options: KotlinTraceOptions) {
-        if (installed) return
-        installed = true
+    @Volatile
+    internal var installedBackends: Set<Backend> = emptySet()
+
+    fun install(options: KotlinTraceOptions) {
+        installedBackends = installedBackends + options.backends
+        if (hookInstalled) return
+        hookInstalled = true
         PlatformHook.install(options)
+    }
+
+    // Public so adapter modules (separate Gradle modules) can register their reporters.
+    fun registerBackend(backend: Backend, reporter: (Throwable) -> Unit) {
+        KotlinTraceReporter.register(backend, reporter)
     }
 }

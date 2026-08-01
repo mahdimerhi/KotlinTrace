@@ -70,10 +70,26 @@ KotlinTrace.install(
 )
 ```
 
+### Adapter usage (actual, as built)
+
+```kotlin
+// App startup (iOS). One call per adapter module the app depends on.
+KotlinTrace.installCrashlytics() // extension in :kotlintrace-crashlytics
+```
+
+- `KotlinTrace.install()` merges `backends` across calls and installs the
+  Kotlin/Native uncaught-exception hook exactly once (hook ownership stays in core).
+- Adapter modules register a reporter via `KotlinTrace.registerBackend(...)` and
+  call `KotlinTrace.install(...)` themselves, so `installCrashlytics()` alone is
+  enough for the common single-backend case; combining backends works because
+  installs merge.
+- `installCrashlytics()` fails fast at startup if Firebase Crashlytics is not
+  linked (clear NSException via `FIRCheckCrashlyticsDependencies()`).
+
 ## 6. MVP Scope (v0.1)
 
-- [ ] 1. Common `install()` + `KotlinTraceOptions`
-- [ ] 2. Crashlytics adapter: rewrite Kotlin traces client-side
+- [x] 1. Common `install()` + `KotlinTraceOptions`
+- [x] 2. Crashlytics adapter: rewrite Kotlin traces client-side
 - [ ] 3. Sentry adapter: rewrite Kotlin traces client-side
 - [ ] 4. Sample CMP app that throws in shared Kotlin → before/after evidence
 - [ ] 5. CI: Kotlin/Native test asserting demangled output
@@ -113,12 +129,39 @@ KotlinTrace.install(
 
 ## Phase 2 — Vendor Adapters (MVP features)
 
-- [ ] 2.1 Crashlytics adapter module (`:kotlintrace-crashlytics`), cinterop to
+- [x] 2.1 Crashlytics adapter module (`:kotlintrace-crashlytics`), cinterop to
        `FirebaseCrashlytics`, rewrite trace before upload
 - [ ] 2.2 Sentry adapter module (`:kotlintrace-sentry`)
 - [ ] 2.3 Bugsnag adapter module (`:kotlintrace-bugsnag`) *(lowest priority)*
-- [ ] 2.4 Adapter tests + demo CMP sample app with before/after traces
+- [ ] 2.4 Sample CMP iOS app with a crash button; run it twice — once with the
+       adapter linked, once without — and capture before/after screenshots of
+       the Crashlytics report (mangled vs demangled frames). This is the
+       user-visible proof-of-value feature; next after 2.2.
 - [ ] 2.5 **Hand-off per feature: user commits**
+
+### Phase 2 decisions made (2026-08-01, Crashlytics first)
+
+- **Fatal semantics**: uncaught Kotlin exceptions are recorded via the **public**
+  `recordExceptionModel:` API (the path Firebase's own engineers recommend in
+  firebase-ios-sdk#15512). Tradeoff accepted for v0.1: the readable report shows
+  as a *non-fatal* "recorded exception" in Crashlytics, and the app still aborts
+  (K/N runtime behavior), so the native crash also appears as an unreadable
+  fatal. The CrashKiOS-style private `FIRCLSExceptionRecordNSException` path
+  (fatal + persisted, but address-only → needs dSYMs, brittle) is explicitly
+  **not** used.
+- **No compile-time Firebase dependency**: `crashlytics.def` resolves
+  `FIRCrashlytics`/`FIRExceptionModel`/`FIRStackFrame` at runtime
+  (`NSClassFromString` + `methodForSelector`, pattern from CrashKiOS, Apache-2.0).
+  Works with SPM, CocoaPods, or manual Firebase integration; no linker flags needed.
+- **Hook ownership stays in core**: exactly one `setUnhandledExceptionHook`
+  call, in `PlatformHook.apple.kt`; adapters only register reporters
+  (`KotlinTrace.registerBackend`). Previous hook is chained after reporting.
+- **Demangler upgraded to the real K/N frame format**: verified empirically
+  (kotlinc-native 2.3.21) that `stackTraceToString()` prints
+  `at <i> <lib> <addr> kfun:...#fn(args){} + <off> (/abs/path/File.kt:line:col)`
+  with absolute paths, `line:column`, and `#`-prefixed top-level/constructor
+  names. The old simplified format is still accepted. `(File.kt:line)` only
+  appears in builds with debug info (`-g`); release builds have no file/line.
 
 ## Phase 3 — Polish & Release
 
@@ -168,27 +211,48 @@ kotlintrace/
 ├── PROJECT.md            # planning + roadmap + todos
 ├── README.md             # public-facing intro
 ├── LICENSE               # Apache-2.0
-├── build.gradle.kts      # KMP plugin, targets, sourceset wiring
-├── settings.gradle.kts   # rootProject, repos, version catalog wiring
+├── build.gradle.kts      # KMP plugin, targets, sourceset wiring (core module)
+├── settings.gradle.kts   # rootProject, repos, includes :kotlintrace-crashlytics
 ├── gradle/
 │   ├── libs.versions.toml
 │   └── wrapper/          # Gradle 9.6.1 wrapper (committed)
-└── src/
-    ├── commonMain/kotlin/dev/kotlintrace/
-    │   ├── Backend.kt
-    │   ├── DefaultKotlinTraceDemangler.kt
-    │   ├── KotlinTrace.kt
-    │   ├── KotlinTraceDemangler.kt
-    │   ├── KotlinTraceFrame.kt
-    │   ├── KotlinTraceOptions.kt
-    │   └── PlatformHook.kt        # expect seam
-    ├── appleMain/kotlin/dev/kotlintrace/PlatformHook.apple.kt
-    ├── jvmMain/kotlin/dev/kotlintrace/PlatformHook.jvm.kt
-    └── commonTest/kotlin/dev/kotlintrace/DefaultKotlinTraceDemanglerTest.kt
+├── src/                  # core library (artifact: kotlintrace)
+│   ├── commonMain/kotlin/dev/kotlintrace/
+│   │   ├── Backend.kt
+│   │   ├── DefaultKotlinTraceDemangler.kt
+│   │   ├── KotlinTrace.kt
+│   │   ├── KotlinTraceDemangler.kt
+│   │   ├── KotlinTraceFrame.kt
+│   │   ├── KotlinTraceOptions.kt
+│   │   ├── KotlinTraceReporter.kt   # backend → reporter dispatch
+│   │   └── PlatformHook.kt          # expect seam
+│   ├── appleMain/kotlin/dev/kotlintrace/PlatformHook.apple.kt   # real hook (setUnhandledExceptionHook)
+│   ├── jvmMain/kotlin/dev/kotlintrace/PlatformHook.jvm.kt
+│   └── commonTest/kotlin/dev/kotlintrace/
+│       ├── DefaultKotlinTraceDemanglerTest.kt
+│       └── KotlinTraceReporterTest.kt
+└── kotlintrace-crashlytics/         # Crashlytics adapter (artifact: kotlintrace-crashlytics)
+    ├── build.gradle.kts
+    └── src/
+        ├── commonMain/kotlin/dev/kotlintrace/crashlytics/
+        │   ├── CrashlyticsBackend.kt         # KotlinTrace.installCrashlytics()
+        │   ├── CrashlyticsExceptionReport.kt
+        │   ├── CrashlyticsFrame.kt
+        │   ├── CrashlyticsReportFormatter.kt # pure logic, JVM-tested
+        │   └── CrashlyticsSink.kt            # expect seam
+        ├── appleMain/kotlin/dev/kotlintrace/crashlytics/CrashlyticsSink.apple.kt  # cinterop calls
+        ├── jvmMain/kotlin/dev/kotlintrace/crashlytics/CrashlyticsSink.jvm.kt      # no-op
+        ├── nativeInterop/cinterop/crashlytics.def   # runtime-lookup shims
+        └── commonTest/kotlin/dev/kotlintrace/crashlytics/CrashlyticsReportFormatterTest.kt
 ```
 
 # Decisions to Confirm With User
 
+- [x] Crashlytics fatal semantics: public `recordExceptionModel:` only (non-fatal
+      report; native abort also logged unreadable). Private API rejected. *(2026-08-01)*
+- [x] Module layout: root stays the core module; adapters are subprojects. *(2026-08-01)*
+- [x] Adapter entry API: `KotlinTrace.installCrashlytics()` extension in the
+      adapter module. *(2026-08-01)*
 - [ ] Repo name (`KotlinTrace` vs alternative)
 - [ ] Repo visibility: public vs private
 - [ ] GitHub account/org to own it; create via web UI at push time

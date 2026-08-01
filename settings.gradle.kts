@@ -1,5 +1,7 @@
 rootProject.name = "kotlintrace"
 
+include(":kotlintrace-crashlytics")
+
 pluginManagement {
     repositories {
         google {

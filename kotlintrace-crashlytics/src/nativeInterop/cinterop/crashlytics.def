@@ -1,0 +1,83 @@
+//
+// Pattern adapted from touchlab/CrashKiOS (Apache-2.0): Crashlytics classes and
+// methods are resolved at runtime so this module never needs Firebase at
+// compile or link time. Uses only public Crashlytics APIs:
+//   FIRCrashlytics.crashlytics / recordExceptionModel:
+//   FIRExceptionModel exceptionModelWithName:reason: / setStackTrace:
+//   FIRStackFrame stackFrameWithSymbol:file:line:
+//
+
+package = dev.kotlintrace.crashlytics
+language = Objective-C
+
+---
+
+#import <Foundation/Foundation.h>
+
+static Class KotlinTraceLoadClass(NSString* name) {
+    Class cls = NSClassFromString(name);
+    if (!cls) {
+        @throw [NSException exceptionWithName:@"KotlinTraceCrashlyticsUnavailable"
+            reason:[NSString stringWithFormat:@"Crashlytics class '%@' not found. Link Firebase Crashlytics before using KotlinTrace.", name]
+            userInfo:nil];
+    }
+    return cls;
+}
+
+static void KotlinTraceThrowMissingMethod(NSString* selectorName) {
+    @throw [NSException exceptionWithName:@"KotlinTraceCrashlyticsMethodMissing"
+        reason:[NSString stringWithFormat:@"Crashlytics method '%@' not found. The installed Firebase version may be too old.", selectorName]
+        userInfo:nil];
+}
+
+static void KotlinTraceVerifyMethod(id target, SEL selector, NSString* selectorName) {
+    if (![target methodForSelector:selector]) {
+        KotlinTraceThrowMissingMethod(selectorName);
+    }
+}
+
+void FIRCheckCrashlyticsDependencies(void) {
+    KotlinTraceLoadClass(@"FIRCrashlytics");
+    KotlinTraceLoadClass(@"FIRExceptionModel");
+    KotlinTraceLoadClass(@"FIRStackFrame");
+}
+
+void FIRRecordException(NSString* name, NSString* reason, NSString* framesText) {
+    Class crashlyticsClass = KotlinTraceLoadClass(@"FIRCrashlytics");
+    Class modelClass = KotlinTraceLoadClass(@"FIRExceptionModel");
+    Class frameClass = KotlinTraceLoadClass(@"FIRStackFrame");
+
+    SEL crashlyticsSel = NSSelectorFromString(@"crashlytics");
+    KotlinTraceVerifyMethod(crashlyticsClass, crashlyticsSel, @"crashlytics");
+    id (*crashlyticsFn)(id, SEL) = (id (*)(id, SEL))[crashlyticsClass methodForSelector:crashlyticsSel];
+    id crashlytics = crashlyticsFn(crashlyticsClass, crashlyticsSel);
+
+    SEL modelSel = NSSelectorFromString(@"exceptionModelWithName:reason:");
+    KotlinTraceVerifyMethod(modelClass, modelSel, @"exceptionModelWithName:reason:");
+    id (*modelFn)(id, SEL, NSString*, NSString*) = (id (*)(id, SEL, NSString*, NSString*))[modelClass methodForSelector:modelSel];
+    id model = modelFn(modelClass, modelSel, name, reason);
+
+    SEL frameSel = NSSelectorFromString(@"stackFrameWithSymbol:file:line:");
+    KotlinTraceVerifyMethod(frameClass, frameSel, @"stackFrameWithSymbol:file:line:");
+    id (*frameFn)(id, SEL, NSString*, NSString*, NSInteger) = (id (*)(id, SEL, NSString*, NSString*, NSInteger))[frameClass methodForSelector:frameSel];
+
+    NSMutableArray* frames = [NSMutableArray array];
+    for (NSString* record in [framesText componentsSeparatedByString:@"\n"]) {
+        if ([record length] == 0) continue;
+        NSArray* parts = [record componentsSeparatedByString:@"|"];
+        NSString* symbol = [parts count] > 0 ? [parts objectAtIndex:0] : @"";
+        NSString* file = [parts count] > 1 ? [parts objectAtIndex:1] : @"";
+        NSInteger line = [parts count] > 2 ? [[parts objectAtIndex:2] integerValue] : 0;
+        [frames addObject:frameFn(frameClass, frameSel, symbol, file, line)];
+    }
+
+    SEL setSel = NSSelectorFromString(@"setStackTrace:");
+    KotlinTraceVerifyMethod(model, setSel, @"setStackTrace:");
+    void (*setFn)(id, SEL, NSArray*) = (void (*)(id, SEL, NSArray*))[model methodForSelector:setSel];
+    setFn(model, setSel, frames);
+
+    SEL recordSel = NSSelectorFromString(@"recordExceptionModel:");
+    KotlinTraceVerifyMethod(crashlytics, recordSel, @"recordExceptionModel:");
+    void (*recordFn)(id, SEL, id) = (void (*)(id, SEL, id))[crashlytics methodForSelector:recordSel];
+    recordFn(crashlytics, recordSel, model);
+}
