@@ -94,6 +94,27 @@ class CrashlyticsReportFormatterTest {
     }
 
     @Test
+    fun formatsRuntimeTraceWithoutSourceLocations() {
+        val trace = """
+            kotlin.IllegalStateException: KotlinTrace sample crash from shared Kotlin (CrashBot)
+                at 0   KotlinTraceSample.debug.dylib       0x100d4d377        kfun:kotlin.Throwable#<init>(kotlin.String?){} + 99
+                at 4   KotlinTraceSample.debug.dylib       0x100d2ca57        kfun:dev.kotlintrace.sample.CrashBot#crash(){}kotlin.Throwable + 159
+                at 9   KotlinTraceSample.debug.dylib       0x100d2c747        kfun:dev.kotlintrace.sample.crashOnBackgroundThread${'$'}crashTrampoline#internal + 95
+                at 11  libsystem_pthread.dylib             0x1004d267f        _pthread_start + 103
+        """.trimIndent()
+
+        assertEquals(
+            listOf(
+                CrashlyticsFrame(symbol = "kotlin.Throwable.<init>", file = null, line = null),
+                CrashlyticsFrame(symbol = "dev.kotlintrace.sample.CrashBot.crash", file = null, line = null),
+                CrashlyticsFrame(symbol = "dev.kotlintrace.sample.crashOnBackgroundThread\$crashTrampoline", file = null, line = null),
+                CrashlyticsFrame(symbol = "at 11  libsystem_pthread.dylib             0x1004d267f        _pthread_start + 103", file = null, line = null),
+            ),
+            formatter.formatStackTrace(trace),
+        )
+    }
+
+    @Test
     fun buildReportFromThrowable() {
         val throwable = IllegalStateException("boom 42")
 

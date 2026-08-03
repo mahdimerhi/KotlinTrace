@@ -21,6 +21,15 @@ kotlin {
             baseName = "KotlinTrace"
             isStatic = true
         }
+
+        // Exposes the Kotlin/Native runtime's source-info dispatcher
+        // (Kotlin_getSourceInfo_Function) and the bundled libbacktrace
+        // backend so the library can redirect the former to the latter
+        // on the iOS simulator (where CoreSymbolication is broken).
+        compilations.getByName("main").cinterops.create("sourceinfohook") {
+            defFile(project.file("src/nativeInterop/cinterop/sourceinfohook.def"))
+            compilerOpts("-I${project.file("src/nativeInterop/cinterop").absolutePath}")
+        }
     }
 
     sourceSets {

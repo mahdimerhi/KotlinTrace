@@ -1,0 +1,2 @@
+headers = sourceinfohook.h
+headerFilter = sourceinfohook.h

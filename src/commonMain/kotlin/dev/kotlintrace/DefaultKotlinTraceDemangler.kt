@@ -18,18 +18,19 @@ public class DefaultKotlinTraceDemangler : KotlinTraceDemangler {
         """^kfun:(.+)\.([^()\s]+)\([^)]*\)\s*\((.*):(\d+)\)$"""
     )
 
+    private val visibilitySuffixes = setOf("internal", "external", "private", "protected")
+
     override fun demangle(rawFrame: String): KotlinTraceFrame? {
         val frame = rawFrame.trim()
 
         runtimeFrameRegex.matchEntire(frame)?.let { match ->
-            val location = match.groupValues[2]
-            if (location.isEmpty()) return null
             val (declaringClass, functionName) = parseSymbol(match.groupValues[1]) ?: return null
+            val location = match.groupValues[2].ifEmpty { null }
             return KotlinTraceFrame(
                 declaringClass = declaringClass,
                 functionName = functionName,
-                fileName = location.substringAfterLast('/'),
-                lineNumber = match.groupValues[3].toIntOrNull(),
+                fileName = location?.substringAfterLast('/'),
+                lineNumber = location?.let { match.groupValues[3].toIntOrNull() },
             )
         }
 
@@ -50,7 +51,13 @@ public class DefaultKotlinTraceDemangler : KotlinTraceDemangler {
             if (dotIndex <= 0) return null
             return body.substring(0, dotIndex) to body.substring(dotIndex + 1)
         }
+        val tail = body.substring(hashIndex + 1)
+        if (tail in visibilitySuffixes) {
+            val dotIndex = body.lastIndexOf('.', hashIndex - 1)
+            if (dotIndex <= 0) return null
+            return body.substring(0, dotIndex) to body.substring(dotIndex + 1, hashIndex)
+        }
         val declaringClass = body.substring(0, hashIndex).ifEmpty { null }
-        return declaringClass to body.substring(hashIndex + 1).substringAfter('.')
+        return declaringClass to tail.substringAfter('.')
     }
 }
