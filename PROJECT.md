@@ -107,11 +107,11 @@ KotlinTrace.installCrashlytics() // extension in :kotlintrace-crashlytics
 
 ## Phase 0 — Repo & Tooling
 
+- [x] 0.1 Decide repo name, visibility, GitHub org/owner — name: **KotlinTrace**, owner: **mahdimerhi** (2026-08-03)
+- [x] 0.2 Create repo on GitHub — <https://github.com/mahdimerhi/KotlinTrace>
 - [x] 0.3 Init git locally, sensible `.gitignore` (Gradle/Kotlin/Xcode/build dirs)
 - [x] 0.4 Add `README.md` (short, public-facing) + `LICENSE` (Apache-2.0)
 - [x] 0.5 Confirm Java version (21) and Gradle version for KMP (9.6.1 wrapper, Kotlin 2.3.21)
-- [ ] 0.1 Decide repo name, visibility (public/private), GitHub org/owner
-- [ ] 0.2 Create repo on GitHub (web UI) — **user creates at push time**
 
 ## Phase 1 — Library Skeleton (buildable, testable)
 
@@ -361,7 +361,8 @@ kotlintrace/
       adapter module. *(2026-08-01)*
 - [x] Ordering: sample app (2.4) before Sentry adapter (2.2) — proof-of-value
       first. *(2026-08-01)*
-- [ ] Repo name (`KotlinTrace` vs alternative)
-- [ ] Repo visibility: public vs private
-- [ ] GitHub account/org to own it; create via web UI at push time
+- [x] Repo name: **KotlinTrace** *(2026-08-03)*
+- [x] Repo visibility: set at creation, **mahdimerhi/KotlinTrace** *(2026-08-03)*
+- [x] GitHub account/org to own it: **mahdimerhi**, repo created via web UI at
+      <https://github.com/mahdimerhi/KotlinTrace> *(2026-08-03)*
 - [ ] Kotlin version pin is 2.3.21 (can bump to 2.4.10 later)
