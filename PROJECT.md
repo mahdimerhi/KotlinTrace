@@ -351,18 +351,3 @@ kotlintrace/
                 ├── ContentView.swift
                 └── Assets.xcassets/
 ```
-
-# Decisions to Confirm With User
-
-- [x] Crashlytics fatal semantics: public `recordExceptionModel:` only (non-fatal
-      report; native abort also logged unreadable). Private API rejected. *(2026-08-01)*
-- [x] Module layout: root stays the core module; adapters are subprojects. *(2026-08-01)*
-- [x] Adapter entry API: `KotlinTrace.installCrashlytics()` extension in the
-      adapter module. *(2026-08-01)*
-- [x] Ordering: sample app (2.4) before Sentry adapter (2.2) — proof-of-value
-      first. *(2026-08-01)*
-- [x] Repo name: **KotlinTrace** *(2026-08-03)*
-- [x] Repo visibility: set at creation, **mahdimerhi/KotlinTrace** *(2026-08-03)*
-- [x] GitHub account/org to own it: **mahdimerhi**, repo created via web UI at
-      <https://github.com/mahdimerhi/KotlinTrace> *(2026-08-03)*
-- [ ] Kotlin version pin is 2.3.21 (can bump to 2.4.10 later)
