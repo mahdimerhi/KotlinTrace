@@ -6,12 +6,13 @@ import dev.kotlintrace.Backend
 import dev.kotlintrace.DefaultKotlinTraceDemangler
 import dev.kotlintrace.KotlinTrace
 import dev.kotlintrace.KotlinTraceOptions
+import dev.kotlintrace.KotlinTraceReportFormatter
 
 public fun KotlinTrace.installCrashlytics(
     demangle: Boolean = true,
     includeKotlinSourceLocation: Boolean = true,
 ) {
-    val formatter = CrashlyticsReportFormatter(
+    val formatter = KotlinTraceReportFormatter(
         demangler = if (demangle) DefaultKotlinTraceDemangler() else null,
         includeSourceLocation = includeKotlinSourceLocation,
     )

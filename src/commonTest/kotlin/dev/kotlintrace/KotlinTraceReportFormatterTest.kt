@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package dev.kotlintrace.crashlytics
+package dev.kotlintrace
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-class CrashlyticsReportFormatterTest {
+class KotlinTraceReportFormatterTest {
 
-    private val formatter = CrashlyticsReportFormatter()
+    private val formatter = KotlinTraceReportFormatter()
 
     @Test
     fun formatsRealKotlinNativeTrace() {
@@ -20,8 +20,8 @@ class CrashlyticsReportFormatterTest {
 
         assertEquals(
             listOf(
-                CrashlyticsFrame(symbol = "boomInner", file = "main.kt", line = 17),
-                CrashlyticsFrame(symbol = "main", file = "main.kt", line = 3),
+                KotlinTraceReportFrame(symbol = "boomInner", file = "main.kt", line = 17),
+                KotlinTraceReportFrame(symbol = "main", file = "main.kt", line = 3),
             ),
             formatter.formatStackTrace(trace),
         )
@@ -37,8 +37,8 @@ class CrashlyticsReportFormatterTest {
 
         assertEquals(
             listOf(
-                CrashlyticsFrame(symbol = "at 8   main.kexe   0x10207d163   Init_and_run_start + 99", file = null, line = null),
-                CrashlyticsFrame(symbol = "at 9   dyld   0x18dad3beb   start + 6687", file = null, line = null),
+                KotlinTraceReportFrame(symbol = "at 8   main.kexe   0x10207d163   Init_and_run_start + 99", file = null, line = null),
+                KotlinTraceReportFrame(symbol = "at 9   dyld   0x18dad3beb   start + 6687", file = null, line = null),
             ),
             formatter.formatStackTrace(trace),
         )
@@ -46,21 +46,21 @@ class CrashlyticsReportFormatterTest {
 
     @Test
     fun sourceLocationCanBeDisabled() {
-        val formatter = CrashlyticsReportFormatter(includeSourceLocation = false)
+        val formatter = KotlinTraceReportFormatter(includeSourceLocation = false)
         val trace = """
             kotlin.IllegalStateException: boom
                 at 4   main.kexe   0x10204b533   kfun:#boomInner(kotlin.Int){} + 203 (/Users/mahdi/project/main.kt:17:11)
         """.trimIndent()
 
         assertEquals(
-            listOf(CrashlyticsFrame(symbol = "boomInner", file = null, line = null)),
+            listOf(KotlinTraceReportFrame(symbol = "boomInner", file = null, line = null)),
             formatter.formatStackTrace(trace),
         )
     }
 
     @Test
     fun demanglingCanBeDisabled() {
-        val formatter = CrashlyticsReportFormatter(demangler = null)
+        val formatter = KotlinTraceReportFormatter(demangler = null)
         val trace = """
             kotlin.IllegalStateException: boom
                 at 4   main.kexe   0x10204b533   kfun:#boomInner(kotlin.Int){} + 203 (/Users/mahdi/project/main.kt:17:11)
@@ -68,7 +68,7 @@ class CrashlyticsReportFormatterTest {
 
         assertEquals(
             listOf(
-                CrashlyticsFrame(
+                KotlinTraceReportFrame(
                     symbol = "at 4   main.kexe   0x10204b533   kfun:#boomInner(kotlin.Int){} + 203 (/Users/mahdi/project/main.kt:17:11)",
                     file = null,
                     line = null,
@@ -87,7 +87,7 @@ class CrashlyticsReportFormatterTest {
 
         assertEquals(
             listOf(
-                CrashlyticsFrame(symbol = "dev.kotlintrace.Demangler.parse", file = "Demangler.kt", line = 42),
+                KotlinTraceReportFrame(symbol = "dev.kotlintrace.Demangler.parse", file = "Demangler.kt", line = 42),
             ),
             formatter.formatStackTrace(trace),
         )
@@ -105,10 +105,10 @@ class CrashlyticsReportFormatterTest {
 
         assertEquals(
             listOf(
-                CrashlyticsFrame(symbol = "kotlin.Throwable.<init>", file = null, line = null),
-                CrashlyticsFrame(symbol = "dev.kotlintrace.sample.CrashBot.crash", file = null, line = null),
-                CrashlyticsFrame(symbol = "dev.kotlintrace.sample.crashOnBackgroundThread\$crashTrampoline", file = null, line = null),
-                CrashlyticsFrame(symbol = "at 11  libsystem_pthread.dylib             0x1004d267f        _pthread_start + 103", file = null, line = null),
+                KotlinTraceReportFrame(symbol = "kotlin.Throwable.<init>", file = null, line = null),
+                KotlinTraceReportFrame(symbol = "dev.kotlintrace.sample.CrashBot.crash", file = null, line = null),
+                KotlinTraceReportFrame(symbol = "dev.kotlintrace.sample.crashOnBackgroundThread\$crashTrampoline", file = null, line = null),
+                KotlinTraceReportFrame(symbol = "at 11  libsystem_pthread.dylib             0x1004d267f        _pthread_start + 103", file = null, line = null),
             ),
             formatter.formatStackTrace(trace),
         )
@@ -131,7 +131,11 @@ class CrashlyticsReportFormatterTest {
     fun framesEncodeSymbolFileLine() {
         assertEquals(
             "dev.kotlintrace.MainKt.main|Main.kt|3",
-            CrashlyticsFrame(symbol = "dev.kotlintrace.MainKt.main", file = "Main.kt", line = 3).encode(),
+            KotlinTraceExceptionReport(
+                name = "x",
+                reason = "y",
+                frames = listOf(KotlinTraceReportFrame(symbol = "dev.kotlintrace.MainKt.main", file = "Main.kt", line = 3)),
+            ).framesText,
         )
     }
 
@@ -139,7 +143,11 @@ class CrashlyticsReportFormatterTest {
     fun framesEncodeWithoutFileOrLine() {
         assertEquals(
             "Init_and_run_start||",
-            CrashlyticsFrame(symbol = "Init_and_run_start", file = null, line = null).encode(),
+            KotlinTraceExceptionReport(
+                name = "x",
+                reason = "y",
+                frames = listOf(KotlinTraceReportFrame(symbol = "Init_and_run_start", file = null, line = null)),
+            ).framesText,
         )
     }
 }

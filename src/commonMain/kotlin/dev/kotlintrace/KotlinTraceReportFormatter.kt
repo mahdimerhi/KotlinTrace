@@ -1,23 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package dev.kotlintrace.crashlytics
+package dev.kotlintrace
 
-import dev.kotlintrace.DefaultKotlinTraceDemangler
-import dev.kotlintrace.KotlinTraceDemangler
-
-public class CrashlyticsReportFormatter(
+public class KotlinTraceReportFormatter(
     public val demangler: KotlinTraceDemangler? = DefaultKotlinTraceDemangler(),
     public val includeSourceLocation: Boolean = true,
 ) {
-    public fun format(throwable: Throwable): CrashlyticsExceptionReport =
-        CrashlyticsExceptionReport(
+    public fun format(throwable: Throwable): KotlinTraceExceptionReport =
+        KotlinTraceExceptionReport(
             name = throwable::class.simpleName ?: "Throwable",
             reason = throwable.message ?: "",
-            framesText = formatStackTrace(throwable.stackTraceToString())
-                .joinToString("\n") { it.encode() },
+            frames = formatStackTrace(throwable.stackTraceToString()),
         )
 
-    public fun formatStackTrace(rawTrace: String): List<CrashlyticsFrame> =
+    public fun formatStackTrace(rawTrace: String): List<KotlinTraceReportFrame> =
         rawTrace.lineSequence()
             .drop(1)
             .map { it.trim() }
@@ -25,14 +21,14 @@ public class CrashlyticsReportFormatter(
             .map { line ->
                 val demangled = demangler?.demangle(line)
                 if (demangled != null) {
-                    CrashlyticsFrame(
+                    KotlinTraceReportFrame(
                         symbol = listOfNotNull(demangled.declaringClass, demangled.functionName)
                             .joinToString("."),
                         file = if (includeSourceLocation) demangled.fileName else null,
                         line = if (includeSourceLocation) demangled.lineNumber else null,
                     )
                 } else {
-                    CrashlyticsFrame(symbol = line, file = null, line = null)
+                    KotlinTraceReportFrame(symbol = line, file = null, line = null)
                 }
             }
             .toList()
