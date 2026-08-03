@@ -54,11 +54,26 @@
   - **Acceptance met**: readable Kotlin frames (function / file / line)
     visible in a Crashlytics report
 
+- [x] **Sentry adapter (roadmap 2.2)**
+  - `:kotlintrace-sentry` module, runtime-lookup cinterop (`sentry.def`), zero
+    compile-time Sentry dependency (chosen over the official KMP SDK)
+  - Formatter extracted into core (`KotlinTraceReportFormatter` /
+    `KotlinTraceExceptionReport` / `KotlinTraceReportFrame`) — shared by both
+    sinks; `CrashlyticsBackend` uses it; tests moved to core commonTest
+  - `KotlinTrace.installSentry()` entry point, fail-fast dependency check
+  - Sample: Sentry SPM package + dSYM upload phase (sentry-wizard), SentrySDK
+    start with `enableCrashHandler = false`, `-sentrycrash` launch arg, Sentry
+    crash button; `-ObjC` linker flag (static-Sentry dead-stripping fix)
+  - shim handles sentry-cocoa 9.x Swift class (`Sentry.SentrySDK`) + async
+    transport (`flush:` before the process dies)
+  - Evidence: `-sentrycrash` run on the iOS 27.0 sim → `captureEvent:` +
+    `flush:`, envelope uploaded, `status 200`; sentry.io project `apple-ios`
+    shows demangled `IllegalStateException` with `CrashBot.kt:NN` frames
+  - **Acceptance met**: one KotlinTrace event per crash, demangled frames in
+    Sentry
+
 ## Next up
-- [ ] **Sentry adapter (roadmap 2.2)**
-  - Reuses core pipeline (formatter + reporter); only the sink changes
-  - Research first: Sentry KMP SDK (getsentry/sentry-kotlin-multiplatform) vs
-    runtime-lookup cinterop like Crashlytics
+
 - [ ] **Bugsnag adapter (roadmap 2.3)** — lowest priority
 
 ## Later (roadmap Phase 3/4)

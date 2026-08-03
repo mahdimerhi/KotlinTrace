@@ -75,6 +75,7 @@ KotlinTrace.install(
 ```kotlin
 // App startup (iOS). One call per adapter module the app depends on.
 KotlinTrace.installCrashlytics() // extension in :kotlintrace-crashlytics
+KotlinTrace.installSentry()      // extension in :kotlintrace-sentry
 ```
 
 - `KotlinTrace.install()` merges `backends` across calls and installs the
@@ -85,12 +86,14 @@ KotlinTrace.installCrashlytics() // extension in :kotlintrace-crashlytics
   installs merge.
 - `installCrashlytics()` fails fast at startup if Firebase Crashlytics is not
   linked (clear NSException via `FIRCheckCrashlyticsDependencies()`).
+- `installSentry()` fails fast if sentry-cocoa is not linked (clear
+  NSException via the runtime class lookup).
 
 ## 6. MVP Scope (v0.1)
 
 - [x] 1. Common `install()` + `KotlinTraceOptions`
 - [x] 2. Crashlytics adapter: rewrite Kotlin traces client-side
-- [ ] 3. Sentry adapter: rewrite Kotlin traces client-side
+- [x] 3. Sentry adapter: rewrite Kotlin traces client-side
 - [x] 4. Sample CMP app that throws in shared Kotlin → before/after evidence
 - [ ] 5. CI: Kotlin/Native test asserting demangled output
 
@@ -134,7 +137,11 @@ KotlinTrace.installCrashlytics() // extension in :kotlintrace-crashlytics
 
 - [x] 2.1 Crashlytics adapter module (`:kotlintrace-crashlytics`), cinterop to
        `FirebaseCrashlytics`, rewrite trace before upload
-- [ ] 2.2 Sentry adapter module (`:kotlintrace-sentry`)
+- [x] 2.2 Sentry adapter module (`:kotlintrace-sentry`), runtime-lookup cinterop
+       to sentry-cocoa (`SentrySDK.captureEvent:`), rewrite trace before
+       upload. **Done (2026-08-03)**: crash on the iOS 27.0 simulator produced a
+       Sentry event with demangled Kotlin frames, delivered to the Sentry
+       ingest API (HTTP 200; sentry.io project `apple-ios`).
 - [ ] 2.3 Bugsnag adapter module (`:kotlintrace-bugsnag`) *(lowest priority)*
 - [x] 2.4 Sample CMP iOS app with a crash button; run it twice — once with the
        adapter linked, once without — and capture before/after evidence of the
@@ -188,6 +195,42 @@ KotlinTrace.installCrashlytics() // extension in :kotlintrace-crashlytics
   - Verified on the iOS 27.0 simulator: `printStackTrace()` and uncaught
     exception both resolve real file:line for Kotlin frames (and Swift frames).
 
+### Sentry adapter (roadmap 2.2) — done (2026-08-03)
+
+- **Runtime-lookup cinterop** (`kotlintrace-sentry/src/nativeInterop/cinterop/sentry.def`),
+  mirroring the Crashlytics adapter: classes + `captureEvent:` resolved at
+  runtime (`NSClassFromString` / `methodForSelector`), so the module has zero
+  compile-time Sentry dependency. Chosen over the official
+  `sentry-kotlin-multiplatform` SDK (which links Sentry at build time and adds
+  no value for the client-side trace rewrite).
+- **Formatter lives in core now**: `KotlinTraceReportFormatter` +
+  `KotlinTraceExceptionReport` + `KotlinTraceReportFrame`
+  (`src/commonMain/.../dev/kotlintrace/`), shared by the Crashlytics and Sentry
+  sinks (wire format: one `symbol|file|line` line per frame). Tests moved to
+  `KotlinTraceReportFormatterTest` in core `commonTest`.
+- **Link-time requirements in the app (SPM, sentry-cocoa 9.x)**:
+  - `-ObjC` in `OTHER_LDFLAGS` — the static product dead-strips ObjC classes
+    (e.g. `SentryEvent`) that nothing references at compile time; our adapter
+    looks them up by name at runtime.
+  - `SentrySDK` is a **Swift** class in sentry-cocoa 9.x, so its ObjC runtime
+    name is the mangled `Sentry.SentrySDK`, not `SentrySDK`. The shim tries
+    `Sentry.SentrySDK` first, then plain `SentrySDK` (pre-9.x fallback).
+  - `captureEvent:` is asynchronous — the shim calls the SDK's `flush:`
+    (5 s timeout) before the hook returns, so the envelope is written+uploaded
+    before the process aborts (verified: HTTP 200 from the ingest API within
+    ~200 ms of the crash).
+- **Duplicate-report handling**: the sample disables Sentry's own crash handler
+  (`options.enableCrashHandler = false` in `KotlinTraceSampleApp.swift`) —
+  SentryCrash would otherwise add a second native SIGABRT event with mangled
+  `kfun:` frames, exactly the noise KotlinTrace removes.
+- **Fail-fast**: `installSentry()` throws a clear NSException at startup when
+  sentry-cocoa isn't linked (mirrors the Crashlytics check).
+- Evidence: `-sentrycrash` launch-arg run on the iOS 27.0 simulator — crash at
+  +15 s, `captureEvent:` + `flush:` in the hook, envelope uploaded
+  (`status 200`, 3.2 KB body). Sentry.io project `apple-ios` should show an
+  `IllegalStateException` event with demangled `CrashBot.kt:NN` frames,
+  mechanism `kotlintrace`, environment `simulator-demo`.
+
 ### Sample app (roadmap 2.4) — done (commit `dbc72bb`)
 
 Built in-repo (committed):
@@ -203,6 +246,30 @@ Built in-repo (committed):
   One build, two reports: same app binary always links the adapter; the "raw"
   run just skips the install call.
 - `GoogleService-Info.plist` is gitignored (secret).
+
+### Sample app — Sentry integration (added with roadmap 2.2)
+
+- `:sample:shared` now depends on `:kotlintrace-sentry`; `CrashBot.setupSentry()`
+  wraps `KotlinTrace.installSentry()`.
+- `KotlinTraceSampleApp.swift` adds `SentrySDK.start { ... }` (DSN,
+  `environment = "simulator-demo"`, `enableCrashHandler = false`) right after
+  `FirebaseApp.configure()`; new `-sentrycrash` launch arg runs
+  `setupSentry()` + `triggerCrash()` after 15 s (alongside `-crash` and
+  `-rawcrash`).
+- `ContentView.swift` adds a "Crash (demangled via KotlinTrace → Sentry)"
+  button.
+- Sentry wizard (`sentry-wizard` 7.0.0 via Homebrew) did the SPM wiring:
+  `sentry-cocoa` package (≥ 9.0.0, product `Sentry`), "Upload Debug Symbols to
+  Sentry" shell phase (`sentry-cli debug-files upload --include-sources`),
+  `.sentryclirc` (gitignored via `sample/ios/KotlinTraceSample/.gitignore`).
+  Sentry project: org `na-q2i`, project `apple-ios` (Cocoa SDK).
+- Sentry SPM first-resolution hiccup (Xcode-beta): `xcodebuild
+  -resolvePackageDependencies` hung at "Resolve Package Graph" because the
+  remote-source-package loader wedged after a killed run left a corrupted
+  `SourcePackages/workspace-state.json`. Fix: delete the DerivedData
+  `SourcePackages` dir + stale `~/Library/Caches/org.swift.swiftpm` manifest
+  entries/locks, then resolve again (~15 min; downloads 7 Sentry XCFramework
+  zips, ~750 MB, into the SPM artifact cache).
 
 User-side steps (must be done manually — no xcodegen, so the Xcode project is
 hand-created in Xcode; the `.pbxproj` is too fragile to generate). **All done
@@ -251,6 +318,13 @@ hand-created in Xcode; the `.pbxproj` is too fragile to generate). **All done
 
 Acceptance: readable Kotlin frames (function / file / line) visible in a
 Crashlytics report — **met (2026-08-03)**.
+
+Acceptance (Sentry, roadmap 2.2): crash on the simulator with `-sentrycrash`
+uploads one KotlinTrace event per crash (`status 200` at the ingest API,
+verified in the sim console); sentry.io (project `apple-ios`) shows
+`IllegalStateException` with demangled `CrashBot.crash (CrashBot.kt:23)`
+frames, mechanism `kotlintrace`, environment `simulator-demo` — **met
+(2026-08-03)**.
 
 ## Phase 3 — Polish & Release
 
@@ -301,7 +375,8 @@ kotlintrace/
 ├── README.md             # public-facing intro
 ├── LICENSE               # Apache-2.0
 ├── build.gradle.kts      # KMP plugin, targets, sourceset wiring (core module)
-├── settings.gradle.kts   # rootProject, repos, includes :kotlintrace-crashlytics, :sample:shared
+├── settings.gradle.kts   # rootProject, repos, includes :kotlintrace-crashlytics,
+│                         #   :kotlintrace-sentry, :sample:shared
 ├── gradle/
 │   ├── libs.versions.toml
 │   └── wrapper/          # Gradle 9.6.1 wrapper (committed)
@@ -314,27 +389,36 @@ kotlintrace/
 │   │   ├── KotlinTraceFrame.kt
 │   │   ├── KotlinTraceOptions.kt
 │   │   ├── KotlinTraceReporter.kt   # backend → reporter dispatch
+│   │   ├── KotlinTraceExceptionReport.kt  # formatter output (shared)
+│   │   ├── KotlinTraceReportFormatter.kt  # vendor-agnostic trace formatter
+│   │   ├── KotlinTraceReportFrame.kt
 │   │   └── PlatformHook.kt          # expect seam
 │   ├── appleMain/kotlin/dev/kotlintrace/PlatformHook.apple.kt   # real hook (setUnhandledExceptionHook)
 │   ├── appleMain/kotlin/dev/kotlintrace/SourceInfoHook.apple.kt # simulator libbacktrace hook (KT-75992)
 │   ├── jvmMain/kotlin/dev/kotlintrace/PlatformHook.jvm.kt
 │   └── commonTest/kotlin/dev/kotlintrace/
 │       ├── DefaultKotlinTraceDemanglerTest.kt
-│       └── KotlinTraceReporterTest.kt
+│       ├── KotlinTraceReporterTest.kt
+│       └── KotlinTraceReportFormatterTest.kt
 ├── src/nativeInterop/cinterop/sourceinfohook.{def,h}   # simulator source-info hook bindings (KT-75992)
 └── kotlintrace-crashlytics/         # Crashlytics adapter (artifact: kotlintrace-crashlytics)
     ├── build.gradle.kts
     └── src/
         ├── commonMain/kotlin/dev/kotlintrace/crashlytics/
         │   ├── CrashlyticsBackend.kt         # KotlinTrace.installCrashlytics()
-        │   ├── CrashlyticsExceptionReport.kt
-        │   ├── CrashlyticsFrame.kt
-        │   ├── CrashlyticsReportFormatter.kt # pure logic, JVM-tested
         │   └── CrashlyticsSink.kt            # expect seam
         ├── appleMain/kotlin/dev/kotlintrace/crashlytics/CrashlyticsSink.apple.kt  # cinterop calls
         ├── jvmMain/kotlin/dev/kotlintrace/crashlytics/CrashlyticsSink.jvm.kt      # no-op
-        ├── nativeInterop/cinterop/crashlytics.def   # runtime-lookup shims
-        └── commonTest/kotlin/dev/kotlintrace/crashlytics/CrashlyticsReportFormatterTest.kt
+        └── nativeInterop/cinterop/crashlytics.def   # runtime-lookup shims
+└── kotlintrace-sentry/             # Sentry adapter (artifact: kotlintrace-sentry)
+    ├── build.gradle.kts
+    └── src/
+        ├── commonMain/kotlin/dev/kotlintrace/sentry/
+        │   ├── SentryBackend.kt             # KotlinTrace.installSentry()
+        │   └── SentrySink.kt                # expect seam
+        ├── appleMain/kotlin/dev/kotlintrace/sentry/SentrySink.apple.kt  # cinterop calls
+        ├── jvmMain/kotlin/dev/kotlintrace/sentry/SentrySink.jvm.kt      # no-op
+        └── nativeInterop/cinterop/sentry.def       # runtime-lookup shims
 └── sample/                # roadmap 2.4 demo (artifact: kotlintrace-sample-shared)
     ├── shared/            # shared Kotlin demo code
     │   ├── build.gradle.kts
