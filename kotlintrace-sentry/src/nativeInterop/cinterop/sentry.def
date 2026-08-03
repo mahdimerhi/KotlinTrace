@@ -1,0 +1,115 @@
+//
+// Runtime-lookup Sentry bindings, mirroring the Crashlytics adapter pattern:
+// classes and methods are resolved at runtime so this module never needs
+// sentry-cocoa at compile or link time. Uses only public Sentry APIs:
+//   SentrySDK.captureEvent:
+//   SentryEvent / SentryException / SentryMechanism / SentryStacktrace / SentryFrame
+// Frame/event fields are set via KVC (setValue:forKey:) — same public property
+// surface as the documented initializers, but selector-based so no headers are
+// needed at build time.
+//
+
+package = dev.kotlintrace.sentry
+language = Objective-C
+
+---
+
+#import <Foundation/Foundation.h>
+
+static Class KotlinTraceSentryLoadClass(NSString* name) {
+    Class cls = NSClassFromString(name);
+    if (!cls) {
+        @throw [NSException exceptionWithName:@"KotlinTraceSentryUnavailable"
+            reason:[NSString stringWithFormat:@"Sentry class '%@' not found. Link sentry-cocoa before using KotlinTrace.", name]
+            userInfo:nil];
+    }
+    return cls;
+}
+
+// SentrySDK is a Swift class in sentry-cocoa 9.x, so it registers under the
+// mangled name 'Sentry.SentrySDK'; older versions used a plain ObjC class.
+static Class KotlinTraceSentryLoadSDK(void) {
+    Class cls = NSClassFromString(@"Sentry.SentrySDK");
+    return cls ? cls : KotlinTraceSentryLoadClass(@"SentrySDK");
+}
+
+static void KotlinTraceSentryThrowMissingMethod(NSString* selectorName) {
+    @throw [NSException exceptionWithName:@"KotlinTraceSentryMethodMissing"
+        reason:[NSString stringWithFormat:@"Sentry method '%@' not found. The installed Sentry version may be too old.", selectorName]
+        userInfo:nil];
+}
+
+static void KotlinTraceSentryVerifyMethod(id target, SEL selector, NSString* selectorName) {
+    if (![target methodForSelector:selector]) {
+        KotlinTraceSentryThrowMissingMethod(selectorName);
+    }
+}
+
+void KotlinTraceCheckSentryDependencies(void) {
+    KotlinTraceSentryLoadSDK();
+    KotlinTraceSentryLoadClass(@"SentryEvent");
+    KotlinTraceSentryLoadClass(@"SentryException");
+    KotlinTraceSentryLoadClass(@"SentryMechanism");
+    KotlinTraceSentryLoadClass(@"SentryStacktrace");
+    KotlinTraceSentryLoadClass(@"SentryFrame");
+}
+
+void KotlinTraceRecordSentryEvent(NSString* name, NSString* reason, NSString* framesText) {
+    @try {
+        Class sdkClass = KotlinTraceSentryLoadSDK();
+        Class eventClass = KotlinTraceSentryLoadClass(@"SentryEvent");
+        Class exceptionClass = KotlinTraceSentryLoadClass(@"SentryException");
+        Class mechanismClass = KotlinTraceSentryLoadClass(@"SentryMechanism");
+        Class stackClass = KotlinTraceSentryLoadClass(@"SentryStacktrace");
+        Class frameClass = KotlinTraceSentryLoadClass(@"SentryFrame");
+
+        SEL captureSel = NSSelectorFromString(@"captureEvent:");
+        KotlinTraceSentryVerifyMethod(sdkClass, captureSel, @"captureEvent:");
+        void (*captureFn)(id, SEL, id) = (void (*)(id, SEL, id))[sdkClass methodForSelector:captureSel];
+
+        id event = [[eventClass alloc] init];
+
+        NSMutableArray* frames = [NSMutableArray array];
+        for (NSString* record in [framesText componentsSeparatedByString:@"\n"]) {
+            if ([record length] == 0) continue;
+            NSArray* parts = [record componentsSeparatedByString:@"|"];
+            id frame = [[frameClass alloc] init];
+            if ([parts count] > 0 && [[parts objectAtIndex:0] length] > 0) {
+                [frame setValue:[parts objectAtIndex:0] forKey:@"function"];
+            }
+            if ([parts count] > 1 && [[parts objectAtIndex:1] length] > 0) {
+                [frame setValue:[parts objectAtIndex:1] forKey:@"fileName"];
+            }
+            if ([parts count] > 2 && [[parts objectAtIndex:2] length] > 0) {
+                [frame setValue:@([[parts objectAtIndex:2] integerValue]) forKey:@"lineNumber"];
+            }
+            [frames addObject:frame];
+        }
+
+        id stacktrace = [[stackClass alloc] init];
+        [stacktrace setValue:frames forKey:@"frames"];
+        [event setValue:stacktrace forKey:@"stacktrace"];
+
+        id exception = [[exceptionClass alloc] init];
+        [exception setValue:reason forKey:@"value"];
+        [exception setValue:name forKey:@"type"];
+        [event setValue:@[ exception ] forKey:@"exceptions"];
+
+        id mechanism = [[mechanismClass alloc] init];
+        [mechanism setValue:@"kotlintrace" forKey:@"type"];
+        [exception setValue:mechanism forKey:@"mechanism"];
+
+        [event setValue:@(4) forKey:@"level"]; // kSentryLevelError
+
+        captureFn(sdkClass, captureSel, event);
+
+        SEL flushSel = NSSelectorFromString(@"flush:");
+        if ([sdkClass respondsToSelector:flushSel]) {
+            void (*flushFn)(id, SEL, double) = (void (*)(id, SEL, double))[sdkClass methodForSelector:flushSel];
+            flushFn(sdkClass, flushSel, 5.0);
+        }
+    } @catch (NSException* e) {
+        // The uncaught-exception hook must never die here; swallow and let
+        // the process terminate normally.
+    }
+}

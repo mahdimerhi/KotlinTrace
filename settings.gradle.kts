@@ -1,6 +1,7 @@
 rootProject.name = "kotlintrace"
 
 include(":kotlintrace-crashlytics")
+include(":kotlintrace-sentry")
 include(":sample:shared")
 
 pluginManagement {
