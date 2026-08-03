@@ -18,3 +18,6 @@ node_modules/
 
 # Gradle wrapper jar must NOT be ignored
 !gradle-wrapper.jar
+
+# Firebase config is a secret; user drops it into sample/ios/
+GoogleService-Info.plist
