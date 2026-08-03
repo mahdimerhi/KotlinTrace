@@ -4,12 +4,17 @@ package dev.kotlintrace.sample
 
 import dev.kotlintrace.KotlinTrace
 import dev.kotlintrace.crashlytics.installCrashlytics
+import dev.kotlintrace.sentry.installSentry
 
 object CrashBot {
     const val CRASH_MESSAGE = "KotlinTrace sample crash from shared Kotlin (CrashBot)"
 
     fun setupCrashlytics() {
         KotlinTrace.installCrashlytics()
+    }
+
+    fun setupSentry() {
+        KotlinTrace.installSentry()
     }
 
     // Crashes on a Kotlin/Native thread so the uncaught-exception hook fires

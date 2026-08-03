@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		11FF870C301E9C730049DBAB /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = 11FF870B301E9C730049DBAB /* FirebaseCrashlytics */; };
 		11FF870F301E9CF40049DBAB /* SampleShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 11FF870E301E9CF40049DBAB /* SampleShared.framework */; };
+		4C6BB91DFD04402AABF97018 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = B6F72C224D2B4EFF8F6F42FC /* Sentry */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,6 +31,7 @@
 			files = (
 				11FF870C301E9C730049DBAB /* FirebaseCrashlytics in Frameworks */,
 				11FF870F301E9CF40049DBAB /* SampleShared.framework in Frameworks */,
+				4C6BB91DFD04402AABF97018 /* Sentry in Frameworks */,
 			);
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -73,6 +75,7 @@
 				11FF86CB301E97B90049DBAB /* Resources */,
 				11FF8714301E9FE50049DBAB /* ShellScript */,
 				11FF87AA301E9FE50049DBAB /* ShellScript */,
+				6F093C6F08BE4BF7A1428305 /* Upload Debug Symbols to Sentry */,
 			);
 			buildRules = (
 			);
@@ -82,6 +85,7 @@
 			name = KotlinTraceSample;
 			packageProductDependencies = (
 				11FF870B301E9C730049DBAB /* FirebaseCrashlytics */,
+				B6F72C224D2B4EFF8F6F42FC /* Sentry */,
 			);
 			productName = KotlinTraceSample;
 			productReference = 11FF86CD301E97B90049DBAB /* KotlinTraceSample.app */;
@@ -113,6 +117,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				11FF870A301E9C730049DBAB /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				E01CEEA43D4742BB84120126 /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 11FF86CE301E97B90049DBAB /* Products */;
@@ -181,6 +186,36 @@
 				"fi",
 				"",
 			);
+		};
+		6F093C6F08BE4BF7A1428305 /* Upload Debug Symbols to Sentry */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}/Contents/Resources/DWARF/${TARGET_NAME}",
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# This script is responsible for uploading debug symbols and source context for Sentry.
+if [[ \"$(uname -m)\" == arm64 ]]; then
+  export PATH=\"/opt/homebrew/bin:$PATH\"
+fi
+
+if which sentry-cli >/dev/null; then
+  export SENTRY_ORG=na-q2i
+  export SENTRY_PROJECT=apple-ios
+  ERROR=$(sentry-cli debug-files upload --include-sources \"$DWARF_DSYM_FOLDER_PATH\" 2>&1 >/dev/null)
+  if [ ! $? -eq 0 ]; then
+    echo \"warning: sentry-cli - $ERROR\"
+  fi
+else
+  echo \"warning: sentry-cli not installed, download from https://github.com/getsentry/sentry-cli/releases\"
+fi
+";
+			name = "Upload Debug Symbols to Sentry";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -322,6 +357,10 @@
 				DEVELOPMENT_TEAM = 4J987P46GX;
 				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_PREVIEWS = YES;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -342,6 +381,8 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_USER_SCRIPT_SANDBOXING = "NO";
 			};
 			name = Debug;
 		};
@@ -354,6 +395,10 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 4J987P46GX;
 				ENABLE_PREVIEWS = YES;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -374,6 +419,8 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_USER_SCRIPT_SANDBOXING = "NO";
 			};
 			name = Release;
 		};
@@ -407,6 +454,14 @@
 				minimumVersion = 12.17.0;
 			};
 		};
+		E01CEEA43D4742BB84120126 /* XCRemoteSwiftPackageReference "sentry-cocoa" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/getsentry/sentry-cocoa/";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 9.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -414,6 +469,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 11FF870A301E9C730049DBAB /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseCrashlytics;
+		};
+		B6F72C224D2B4EFF8F6F42FC /* Sentry */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E01CEEA43D4742BB84120126 /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
+			productName = Sentry;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

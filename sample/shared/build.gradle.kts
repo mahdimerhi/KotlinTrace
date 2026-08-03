@@ -33,6 +33,7 @@ kotlin {
         commonMain.dependencies {
             implementation(project(":"))
             implementation(project(":kotlintrace-crashlytics"))
+            implementation(project(":kotlintrace-sentry"))
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
