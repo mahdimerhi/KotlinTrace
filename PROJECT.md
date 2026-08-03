@@ -91,7 +91,7 @@ KotlinTrace.installCrashlytics() // extension in :kotlintrace-crashlytics
 - [x] 1. Common `install()` + `KotlinTraceOptions`
 - [x] 2. Crashlytics adapter: rewrite Kotlin traces client-side
 - [ ] 3. Sentry adapter: rewrite Kotlin traces client-side
-- [ ] 4. Sample CMP app that throws in shared Kotlin → before/after evidence
+- [x] 4. Sample CMP app that throws in shared Kotlin → before/after evidence
 - [ ] 5. CI: Kotlin/Native test asserting demangled output
 
 ## 7. Non-Goals (v0.1)
@@ -105,7 +105,7 @@ KotlinTrace.installCrashlytics() // extension in :kotlintrace-crashlytics
 
 # ROADMAP
 
-## Phase 0 — Repo & Tooling (current)
+## Phase 0 — Repo & Tooling
 
 - [x] 0.3 Init git locally, sensible `.gitignore` (Gradle/Kotlin/Xcode/build dirs)
 - [x] 0.4 Add `README.md` (short, public-facing) + `LICENSE` (Apache-2.0)
@@ -124,8 +124,11 @@ KotlinTrace.installCrashlytics() // extension in :kotlintrace-crashlytics
        `setUnhandledExceptionHook` wiring deferred to Phase 2)
 - [x] 1.6 `commonTest`: demangler unit tests (run on JVM host)
 - [x] 1.7 Verify: `./gradlew build` passes (JVM tests green; iOS targets compile;
-       iOS simulator tests disabled on this host — no simulator SDK installed)
-- [ ] 1.8 **Hand-off: user reviews, commits, pushes to GitHub**
+       iOS simulator *test* tasks remain disabled by choice — the 27.0 runtime
+       is installed and used for the sample app, but K/N test targets are a
+       separate decision)
+- [x] 1.8 **Hand-off: user reviews, commits, pushes to GitHub** (committed;
+       push lands together with repo creation, Phase 0.2)
 
 ## Phase 2 — Vendor Adapters (MVP features)
 
@@ -133,12 +136,13 @@ KotlinTrace.installCrashlytics() // extension in :kotlintrace-crashlytics
        `FirebaseCrashlytics`, rewrite trace before upload
 - [ ] 2.2 Sentry adapter module (`:kotlintrace-sentry`)
 - [ ] 2.3 Bugsnag adapter module (`:kotlintrace-bugsnag`) *(lowest priority)*
-- [ ] 2.4 Sample CMP iOS app with a crash button; run it twice — once with the
-       adapter linked, once without — and capture before/after screenshots of
-       the Crashlytics report (mangled vs demangled frames). This is the
-       user-visible proof-of-value feature; **in progress (user decided to do it
-       before 2.2)**.
-- [ ] 2.5 **Hand-off per feature: user commits**
+- [x] 2.4 Sample CMP iOS app with a crash button; run it twice — once with the
+       adapter linked, once without — and capture before/after evidence of the
+       Crashlytics report (mangled vs demangled frames). **Done (2026-08-03):
+       acceptance met** — the console shows a raw `kfun:` fatal next to a
+       readable non-fatal `IllegalStateException` with demangled names +
+       `(CrashBot.kt:NN)` frames.
+- [x] 2.5 **Hand-off per feature: user commits** (f1bba4d, dbc72bb, c86e202)
 
 ### Phase 2 decisions made (2026-08-01, Crashlytics first)
 
@@ -184,9 +188,9 @@ KotlinTrace.installCrashlytics() // extension in :kotlintrace-crashlytics
   - Verified on the iOS 27.0 simulator: `printStackTrace()` and uncaught
     exception both resolve real file:line for Kotlin frames (and Swift frames).
 
-### Sample app (roadmap 2.4) — current
+### Sample app (roadmap 2.4) — done (commit `dbc72bb`)
 
-Built in-repo (uncommitted):
+Built in-repo (committed):
 - `:sample:shared` KMP module (jvm + 3 iOS targets, static `SampleShared.framework`)
   with `CrashBot`: `setupCrashlytics()` wraps `KotlinTrace.installCrashlytics()`;
   `triggerCrash()` throws on a Kotlin/Native thread so the uncaught-exception
@@ -201,19 +205,20 @@ Built in-repo (uncommitted):
 - `GoogleService-Info.plist` is gitignored (secret).
 
 User-side steps (must be done manually — no xcodegen, so the Xcode project is
-hand-created in Xcode; the `.pbxproj` is too fragile to generate):
-1. Firebase console: create a project → add an iOS app with bundle id
+hand-created in Xcode; the `.pbxproj` is too fragile to generate). **All done
+(2026-08-03):**
+- [x] 1. Firebase console: create a project → add an iOS app with bundle id
    `dev.kotlintrace.sample` → download `GoogleService-Info.plist` into
    `sample/ios/` (gitignored). The app calls `FirebaseApp.configure()` at
    launch (`KotlinTraceSampleApp.swift`), so the plist must be added to the
    app target (File → Add Files… → select plist → "Copy items if needed"
    unchecked is fine since it lives in the project dir → add to target).
-2. Xcode: create a new iOS App project (SwiftUI, bundle id
+- [x] 2. Xcode: create a new iOS App project (SwiftUI, bundle id
    `dev.kotlintrace.sample`) inside `sample/ios/`; replace the generated
    `KotlinTraceSampleApp.swift` / `ContentView.swift` with the repo's versions.
-3. Add the Firebase SPM package (`https://github.com/firebase-ios-sdk/firebase-ios-sdk`,
+- [x] 3. Add the Firebase SPM package (`https://github.com/firebase-ios-sdk/firebase-ios-sdk`,
    product `FirebaseCrashlytics`) to the app target.
-4. Run-script build phase (before "Compile Sources") to build + embed the
+- [x] 4. Run-script build phase (before "Compile Sources") to build + embed the
    Kotlin framework:
    ```
    cd "$SRCROOT/.."
@@ -226,18 +231,18 @@ hand-created in Xcode; the `.pbxproj` is too fragile to generate):
    `sample/shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)/SampleShared.framework`
    → set it to **Do Not Embed** (the framework is static; the script phase only
    makes it available to the linker, it must not be embedded).
-5. Run-script build phase (after the embed phase) to upload dSYMs:
+- [x] 5. Run-script build phase (after the embed phase) to upload dSYMs:
    `${BUILD_DIR%Build/*}/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run`,
    with target build setting `DEBUG_INFORMATION_FORMAT = dwarf-with-dsym`.
-6. Run-script build phase (last) to embed the dSYM in the app bundle for the
+- [x] 6. Run-script build phase (last) to embed the dSYM in the app bundle for the
    libbacktrace source-info hook (simulator file:line; see "Simulator source
    info" above). Copies `$(DWARF_DSYM_FOLDER_PATH)/$(PRODUCT_NAME).app.dSYM`
    into the bundle as `$(EXECUTABLE_NAME).dSYM`
    (→ `<App>/<App>.dSYM/Contents/Resources/DWARF/<App>`).
-7. Run on the iOS simulator; tap "Crash (raw)" → relaunch → tap
+- [x] 7. Run on the iOS simulator; tap "Crash (raw)" → relaunch → tap
    "Crash (demangled)" → relaunch; Crashlytics uploads both reports on the
    next launch.
-8. Evidence: dashboard shows (a) a fatal report with raw `Kotlin_`-mangled
+- [x] 8. Evidence: dashboard shows (a) a fatal report with raw `kfun:`-mangled
    frames (before), and (b) a readable non-fatal recorded exception with
    `CrashBot.crash` / file / line frames (after; the native abort also still
    logs the mangled fatal — known Phase-2 tradeoff). Console-side: the
@@ -245,7 +250,7 @@ hand-created in Xcode; the `.pbxproj` is too fragile to generate):
    `(CrashBot.kt:NN)` frames on the simulator.
 
 Acceptance: readable Kotlin frames (function / file / line) visible in a
-Crashlytics report.
+Crashlytics report — **met (2026-08-03)**.
 
 ## Phase 3 — Polish & Release
 
@@ -311,10 +316,12 @@ kotlintrace/
 │   │   ├── KotlinTraceReporter.kt   # backend → reporter dispatch
 │   │   └── PlatformHook.kt          # expect seam
 │   ├── appleMain/kotlin/dev/kotlintrace/PlatformHook.apple.kt   # real hook (setUnhandledExceptionHook)
+│   ├── appleMain/kotlin/dev/kotlintrace/SourceInfoHook.apple.kt # simulator libbacktrace hook (KT-75992)
 │   ├── jvmMain/kotlin/dev/kotlintrace/PlatformHook.jvm.kt
 │   └── commonTest/kotlin/dev/kotlintrace/
 │       ├── DefaultKotlinTraceDemanglerTest.kt
 │       └── KotlinTraceReporterTest.kt
+├── src/nativeInterop/cinterop/sourceinfohook.{def,h}   # simulator source-info hook bindings (KT-75992)
 └── kotlintrace-crashlytics/         # Crashlytics adapter (artifact: kotlintrace-crashlytics)
     ├── build.gradle.kts
     └── src/
@@ -333,10 +340,16 @@ kotlintrace/
     │   ├── build.gradle.kts
     │   └── src/
     │       ├── commonMain/kotlin/dev/kotlintrace/sample/CrashBot.kt
+    │       ├── appleMain/kotlin/dev/kotlintrace/sample/CrashBot.apple.kt
+    │       ├── jvmMain/kotlin/dev/kotlintrace/sample/CrashBot.jvm.kt
     │       └── commonTest/kotlin/dev/kotlintrace/sample/CrashBotTest.kt
-    └── ios/               # SwiftUI app (Xcode project created locally, not committed)
-        ├── KotlinTraceSampleApp.swift
-        └── ContentView.swift
+    └── ios/               # SwiftUI app (committed; GoogleService-Info.plist gitignored)
+        └── KotlinTraceSample/
+            ├── KotlinTraceSample.xcodeproj/   # hand-created (no xcodegen)
+            └── KotlinTraceSample/
+                ├── KotlinTraceSampleApp.swift
+                ├── ContentView.swift
+                └── Assets.xcassets/
 ```
 
 # Decisions to Confirm With User

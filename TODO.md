@@ -24,7 +24,7 @@
     `KotlinTrace.installCrashlytics()` entry point
   - Demangler upgraded to the real K/N frame format (verified empirically)
   - 17 tests green on JVM; all iOS targets compile + link
-- [x] **Simulator source info (KT-75992)** — done locally, uncommitted
+- [x] **Simulator source info (KT-75992)** (commit `f1bba4d`)
   - Simulator's CoreSymbolication backend never resolves `(File.kt:line)`; the
     runtime's source-info dispatcher (`Kotlin_getSourceInfo_Function`) is now
     redirected to the bundled **libbacktrace** backend via cinterop
@@ -37,25 +37,24 @@
     binary regardless of `DEBUG_INFORMATION_FORMAT`; verified empirically)
   - Verified on iOS 27.0 sim: normal-flow `printStackTrace()` and uncaught
     exception both resolve real file:line, incl. Swift frames
+- [x] **Sample app (roadmap 2.4)** (commit `dbc72bb`) — proves the adapter works
+  - `:sample:shared` KMP module (jvm + iOS, static `SampleShared.framework`)
+    with `CrashBot` (`setupCrashlytics()` wraps `KotlinTrace.installCrashlytics()`;
+    `triggerCrash()` throws on a Kotlin/Native thread so the hook fires) +
+    `CrashBotTest`
+  - SwiftUI app in `sample/ios/` with two buttons — "Crash (demangled via
+    KotlinTrace)" and "Crash (raw)"; `GoogleService-Info.plist` gitignored;
+    Xcode project hand-created (KGP embed phase, Crashlytics upload phase,
+    dSYM-embed phase for the libbacktrace hook)
+  - Firebase project + iOS app (bundle id `dev.kotlintrace.sample`) +
+    `GoogleService-Info.plist` in place
+  - Evidence captured in Crashlytics dashboard: mangled `kfun:` fatal report
+    vs readable non-fatal recorded exception `IllegalStateException` with
+    demangled names + `(CrashBot.kt:NN)` frames
+  - **Acceptance met**: readable Kotlin frames (function / file / line)
+    visible in a Crashlytics report
 
 ## Next up
-
-- [ ] **Sample app (roadmap 2.4) — in progress: proves the adapter works**
-  - [x] done locally, uncommitted: `:sample:shared` KMP module (jvm + iOS,
-    static `SampleShared.framework`) with `CrashBot` (`setupCrashlytics()`
-    wraps `KotlinTrace.installCrashlytics()`; `triggerCrash()` throws on a
-    Kotlin/Native thread so the hook fires) + `CrashBotTest`
-  - [x] done locally, uncommitted: SwiftUI app in `sample/ios/` with two
-    buttons — "Crash (demangled via KotlinTrace)" and "Crash (raw)";
-    `GoogleService-Info.plist` gitignored; Xcode project hand-created
-    (KGP embed phase, Crashlytics upload phase, dSYM-embed phase for the
-    libbacktrace hook)
-  - [ ] user side: Firebase project + iOS app (bundle id
-    `dev.kotlintrace.sample`) + `GoogleService-Info.plist` into `sample/ios/`
-  - [ ] run twice on simulator, capture before/after evidence in Crashlytics
-    dashboard: mangled fatal report vs readable non-fatal recorded exception
-    (function / file / line frames)
-  - [ ] Acceptance: readable Kotlin frames visible in a Crashlytics report
 - [ ] **Sentry adapter (roadmap 2.2)**
   - Reuses core pipeline (formatter + reporter); only the sink changes
   - Research first: Sentry KMP SDK (getsentry/sentry-kotlin-multiplatform) vs
@@ -77,13 +76,13 @@
 
 - `./gradlew build` — full build (JVM tests + all iOS targets compile/link)
 - `./gradlew jvmTest` — pure-logic tests (JVM host)
-- iOS *test* tasks are intentionally disabled (no simulator runtime installed);
-  do not re-enable
+- iOS *test* tasks are intentionally disabled (sample evidence runs on the
+  iOS 27.0 simulator instead); re-enabling is a separate decision
 
 ## Environment notes
 
-- No iOS simulator runtime → iOS tests can't execute here yet (user is
-  downloading it; SDKs 27.0 already present)
+- iOS 27.0 simulator runtime installed (device `84A8EC82-8361-4BEC-86FA-234A2393DA2E`);
+  iOS K/N *test* tasks stay disabled by choice, see Verification commands
 - CocoaPods 1.16.2 installed (needed only if the sample app or a future
   adapter uses the cocoapods plugin)
 - **xcodegen NOT installed** → sample app Xcode project is hand-created in
