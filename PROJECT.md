@@ -136,7 +136,8 @@ KotlinTrace.installCrashlytics() // extension in :kotlintrace-crashlytics
 - [ ] 2.4 Sample CMP iOS app with a crash button; run it twice — once with the
        adapter linked, once without — and capture before/after screenshots of
        the Crashlytics report (mangled vs demangled frames). This is the
-       user-visible proof-of-value feature; next after 2.2.
+       user-visible proof-of-value feature; **in progress (user decided to do it
+       before 2.2)**.
 - [ ] 2.5 **Hand-off per feature: user commits**
 
 ### Phase 2 decisions made (2026-08-01, Crashlytics first)
@@ -162,6 +163,89 @@ KotlinTrace.installCrashlytics() // extension in :kotlintrace-crashlytics
   with absolute paths, `line:column`, and `#`-prefixed top-level/constructor
   names. The old simplified format is still accepted. `(File.kt:line)` only
   appears in builds with debug info (`-g`); release builds have no file/line.
+- **Simulator source info (KT-75992)**: on iOS simulators the runtime's default
+  CoreSymbolication backend never resolves `(File.kt:line)` (no symbolication
+  session is available). Fix, shipped in core `appleMain`:
+  - cinterop (`src/nativeInterop/cinterop/sourceinfohook.{def,h}`) exposes the
+    runtime's writable dispatcher `Kotlin_getSourceInfo_Function` and the
+    bundled libbacktrace backend `Kotlin_getSourceInfo_libbacktrace`
+    (libbacktrace is K/N's default on macOS/desktop and reads DWARF itself).
+  - `SourceInfoHook.install()` (called from `PlatformHook.install()`) points the
+    dispatcher at the libbacktrace backend. Compile-time gated to simulators
+    only (`TARGET_OS_SIMULATOR` in the header); device builds keep the working
+    CoreSymbolication backend.
+  - **App-side prerequisite**: ld64 strips `__debug_*` from app binaries no
+    matter the `DEBUG_INFORMATION_FORMAT` (verified empirically), so the app
+    must ship its dSYM inside the bundle as
+    `<App>/<App>.dSYM/Contents/Resources/DWARF/<App>` — libbacktrace's
+    path-based dSYM lookup (`macho_add_dsym`). The sample's Xcode project has a
+    build phase that copies `$(DWARF_DSYM_FOLDER_PATH)/<App>.app.dSYM` into the
+    bundle. Without it, simulators show no file:line (same as before the fix).
+  - Verified on the iOS 27.0 simulator: `printStackTrace()` and uncaught
+    exception both resolve real file:line for Kotlin frames (and Swift frames).
+
+### Sample app (roadmap 2.4) — current
+
+Built in-repo (uncommitted):
+- `:sample:shared` KMP module (jvm + 3 iOS targets, static `SampleShared.framework`)
+  with `CrashBot`: `setupCrashlytics()` wraps `KotlinTrace.installCrashlytics()`;
+  `triggerCrash()` throws on a Kotlin/Native thread so the uncaught-exception
+  hook fires (an exception crossing the Swift boundary becomes an NSException
+  and bypasses the hook).
+- `sample/ios/`: SwiftUI app (`KotlinTraceSampleApp.swift`, `ContentView.swift`)
+  with two buttons:
+  - "Crash (demangled via KotlinTrace)" → `setupCrashlytics()` + `triggerCrash()`
+  - "Crash (raw, no KotlinTrace)" → `triggerCrash()` only
+  One build, two reports: same app binary always links the adapter; the "raw"
+  run just skips the install call.
+- `GoogleService-Info.plist` is gitignored (secret).
+
+User-side steps (must be done manually — no xcodegen, so the Xcode project is
+hand-created in Xcode; the `.pbxproj` is too fragile to generate):
+1. Firebase console: create a project → add an iOS app with bundle id
+   `dev.kotlintrace.sample` → download `GoogleService-Info.plist` into
+   `sample/ios/` (gitignored). The app calls `FirebaseApp.configure()` at
+   launch (`KotlinTraceSampleApp.swift`), so the plist must be added to the
+   app target (File → Add Files… → select plist → "Copy items if needed"
+   unchecked is fine since it lives in the project dir → add to target).
+2. Xcode: create a new iOS App project (SwiftUI, bundle id
+   `dev.kotlintrace.sample`) inside `sample/ios/`; replace the generated
+   `KotlinTraceSampleApp.swift` / `ContentView.swift` with the repo's versions.
+3. Add the Firebase SPM package (`https://github.com/firebase-ios-sdk/firebase-ios-sdk`,
+   product `FirebaseCrashlytics`) to the app target.
+4. Run-script build phase (before "Compile Sources") to build + embed the
+   Kotlin framework:
+   ```
+   cd "$SRCROOT/.."
+   export JAVA_HOME="$HOME/Library/Java/JavaVirtualMachines/jbr-21.0.9/Contents/Home"
+   ./gradlew :sample:shared:embedAndSignAppleFrameworkForXcode
+   ```
+   (JAVA_HOME line only needed if gradlew reports "Unable to locate a Java Runtime".)
+   After the first build succeeds, link the framework in the app target:
+   "Frameworks, Libraries, and Embedded Content" → "+" → "Add Other…" →
+   `sample/shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)/SampleShared.framework`
+   → set it to **Do Not Embed** (the framework is static; the script phase only
+   makes it available to the linker, it must not be embedded).
+5. Run-script build phase (after the embed phase) to upload dSYMs:
+   `${BUILD_DIR%Build/*}/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run`,
+   with target build setting `DEBUG_INFORMATION_FORMAT = dwarf-with-dsym`.
+6. Run-script build phase (last) to embed the dSYM in the app bundle for the
+   libbacktrace source-info hook (simulator file:line; see "Simulator source
+   info" above). Copies `$(DWARF_DSYM_FOLDER_PATH)/$(PRODUCT_NAME).app.dSYM`
+   into the bundle as `$(EXECUTABLE_NAME).dSYM`
+   (→ `<App>/<App>.dSYM/Contents/Resources/DWARF/<App>`).
+7. Run on the iOS simulator; tap "Crash (raw)" → relaunch → tap
+   "Crash (demangled)" → relaunch; Crashlytics uploads both reports on the
+   next launch.
+8. Evidence: dashboard shows (a) a fatal report with raw `Kotlin_`-mangled
+   frames (before), and (b) a readable non-fatal recorded exception with
+   `CrashBot.crash` / file / line frames (after; the native abort also still
+   logs the mangled fatal — known Phase-2 tradeoff). Console-side: the
+   demangled run's `printStackTrace()` output already shows real
+   `(CrashBot.kt:NN)` frames on the simulator.
+
+Acceptance: readable Kotlin frames (function / file / line) visible in a
+Crashlytics report.
 
 ## Phase 3 — Polish & Release
 
@@ -212,7 +296,7 @@ kotlintrace/
 ├── README.md             # public-facing intro
 ├── LICENSE               # Apache-2.0
 ├── build.gradle.kts      # KMP plugin, targets, sourceset wiring (core module)
-├── settings.gradle.kts   # rootProject, repos, includes :kotlintrace-crashlytics
+├── settings.gradle.kts   # rootProject, repos, includes :kotlintrace-crashlytics, :sample:shared
 ├── gradle/
 │   ├── libs.versions.toml
 │   └── wrapper/          # Gradle 9.6.1 wrapper (committed)
@@ -244,6 +328,15 @@ kotlintrace/
         ├── jvmMain/kotlin/dev/kotlintrace/crashlytics/CrashlyticsSink.jvm.kt      # no-op
         ├── nativeInterop/cinterop/crashlytics.def   # runtime-lookup shims
         └── commonTest/kotlin/dev/kotlintrace/crashlytics/CrashlyticsReportFormatterTest.kt
+└── sample/                # roadmap 2.4 demo (artifact: kotlintrace-sample-shared)
+    ├── shared/            # shared Kotlin demo code
+    │   ├── build.gradle.kts
+    │   └── src/
+    │       ├── commonMain/kotlin/dev/kotlintrace/sample/CrashBot.kt
+    │       └── commonTest/kotlin/dev/kotlintrace/sample/CrashBotTest.kt
+    └── ios/               # SwiftUI app (Xcode project created locally, not committed)
+        ├── KotlinTraceSampleApp.swift
+        └── ContentView.swift
 ```
 
 # Decisions to Confirm With User
@@ -253,6 +346,8 @@ kotlintrace/
 - [x] Module layout: root stays the core module; adapters are subprojects. *(2026-08-01)*
 - [x] Adapter entry API: `KotlinTrace.installCrashlytics()` extension in the
       adapter module. *(2026-08-01)*
+- [x] Ordering: sample app (2.4) before Sentry adapter (2.2) — proof-of-value
+      first. *(2026-08-01)*
 - [ ] Repo name (`KotlinTrace` vs alternative)
 - [ ] Repo visibility: public vs private
 - [ ] GitHub account/org to own it; create via web UI at push time

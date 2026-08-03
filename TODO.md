@@ -24,19 +24,38 @@
     `KotlinTrace.installCrashlytics()` entry point
   - Demangler upgraded to the real K/N frame format (verified empirically)
   - 17 tests green on JVM; all iOS targets compile + link
+- [x] **Simulator source info (KT-75992)** — done locally, uncommitted
+  - Simulator's CoreSymbolication backend never resolves `(File.kt:line)`; the
+    runtime's source-info dispatcher (`Kotlin_getSourceInfo_Function`) is now
+    redirected to the bundled **libbacktrace** backend via cinterop
+    (`src/nativeInterop/cinterop/sourceinfohook.{def,h}`,
+    `SourceInfoHook.apple.kt`), installed from `PlatformHook.install()`,
+    compile-time gated to simulators only (`TARGET_OS_SIMULATOR`)
+  - Prerequisite (app side): embed the dSYM in the app bundle as
+    `<App>/<App>.dSYM/Contents/Resources/DWARF/<App>` — libbacktrace's
+    path-based dSYM lookup (Xcode's ld64 strips `__debug_*` from the app
+    binary regardless of `DEBUG_INFORMATION_FORMAT`; verified empirically)
+  - Verified on iOS 27.0 sim: normal-flow `printStackTrace()` and uncaught
+    exception both resolve real file:line, incl. Swift frames
 
 ## Next up
 
-- [ ] **Sample app (roadmap 2.4) — recommended next: proves the adapter works**
-  - Small iOS app (Xcode project or KMP shared framework) with a "Crash" button
-    that throws in shared Kotlin code
-  - Run twice: once with `kotlintrace-crashlytics` linked, once without
-  - Capture before/after evidence: mangled report vs demangled report in
-    Crashlytics dashboard
-  - Needs: Firebase project + `GoogleService-Info.plist`, iOS simulator
-    (runtime is downloading), dSYM upload for the non-Kotlin frames
-  - Acceptance: readable Kotlin frames (function / file / line) visible in a
-    Crashlytics report
+- [ ] **Sample app (roadmap 2.4) — in progress: proves the adapter works**
+  - [x] done locally, uncommitted: `:sample:shared` KMP module (jvm + iOS,
+    static `SampleShared.framework`) with `CrashBot` (`setupCrashlytics()`
+    wraps `KotlinTrace.installCrashlytics()`; `triggerCrash()` throws on a
+    Kotlin/Native thread so the hook fires) + `CrashBotTest`
+  - [x] done locally, uncommitted: SwiftUI app in `sample/ios/` with two
+    buttons — "Crash (demangled via KotlinTrace)" and "Crash (raw)";
+    `GoogleService-Info.plist` gitignored; Xcode project hand-created
+    (KGP embed phase, Crashlytics upload phase, dSYM-embed phase for the
+    libbacktrace hook)
+  - [ ] user side: Firebase project + iOS app (bundle id
+    `dev.kotlintrace.sample`) + `GoogleService-Info.plist` into `sample/ios/`
+  - [ ] run twice on simulator, capture before/after evidence in Crashlytics
+    dashboard: mangled fatal report vs readable non-fatal recorded exception
+    (function / file / line frames)
+  - [ ] Acceptance: readable Kotlin frames visible in a Crashlytics report
 - [ ] **Sentry adapter (roadmap 2.2)**
   - Reuses core pipeline (formatter + reporter); only the sink changes
   - Research first: Sentry KMP SDK (getsentry/sentry-kotlin-multiplatform) vs
@@ -67,5 +86,7 @@
   downloading it; SDKs 27.0 already present)
 - CocoaPods 1.16.2 installed (needed only if the sample app or a future
   adapter uses the cocoapods plugin)
+- **xcodegen NOT installed** → sample app Xcode project is hand-created in
+  Xcode (see PROJECT.md "Sample app" section for the exact steps)
 - Firebase Crashlytics integration of the adapter requires NO Firebase
   dependency at build time (runtime lookup) — only the app itself must link it
