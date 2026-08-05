@@ -1,12 +1,30 @@
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.binary.compatibility.validator)
+    alias(libs.plugins.dokka)
 }
+
+// Publish conventions shared by all library modules (see gradle/publish.gradle).
+apply(from = rootProject.file("gradle/publish.gradle"))
 
 // The demo module is not published; its public surface is not part of the
 // library ABI contract.
 apiValidation {
     ignoredProjects += listOf("sample", "shared")
+}
+
+// Assembles the Maven Central deployment bundle: one zip containing the Maven
+// repository layout (group/module/version/{pom,module,jars,sources,javadoc,asc})
+// that the Central Portal accepts via its Publisher API.
+tasks.register<Zip>("assembleCentralBundle") {
+    group = "publishing"
+    description = "Assemble the Maven Central deployment bundle for the Central Portal."
+    val published = subprojects.filter { it.name.startsWith("kotlintrace") }
+    dependsOn(":publishAllPublicationsToCentralStagingRepository")
+    published.forEach { dependsOn("${it.path}:publishAllPublicationsToCentralStagingRepository") }
+    from(layout.buildDirectory.dir("central-staging"))
+    archiveFileName.set("kotlintrace-central-bundle.zip")
+    destinationDirectory.set(layout.buildDirectory.dir("central"))
 }
 
 kotlin {

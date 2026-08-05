@@ -1,0 +1,99 @@
+// Shared Maven Central publishing setup for the library modules.
+//
+// Groovy (not Kotlin DSL) on purpose: scripts pulled in with `apply(from=...)`
+// are compiled without the Kotlin Gradle plugin's types on their classpath, so
+// the `kotlin { }` / `publishing { }` / `signing { }` blocks are resolved
+// dynamically against the project's extensions instead.
+//
+// Secrets are provided at publish time — never committed:
+//   signing.key / signing.password   ASCII-armored private key + passphrase
+//                                    (or ORG_GRADLE_PROJECT_signingKey / ...)
+//   SONATYPE_TOKEN                   central.sonatype.com portal token ("user:pass"),
+//                                    consumed by scripts/publish-central.sh
+//
+// Release flow:
+//   ./gradlew assembleCentralBundle
+//   scripts/publish-central.sh
+
+apply plugin: 'maven-publish'
+apply plugin: 'signing'
+
+def libraryGroup = providers.gradleProperty("kotlintrace.group").get()
+def libraryVersion = providers.gradleProperty("kotlintrace.version").get()
+def descriptionValue = providers.gradleProperty("kotlintrace.description.${name}")
+        .orElse("KotlinTrace — readable Kotlin/Native crash reports")
+        .get()
+
+group = libraryGroup
+version = libraryVersion
+
+kotlin {
+    targets.all {
+        // The synthetic "metadata" (common) target has no jars of its own.
+        if (it.name != 'metadata') {
+            withSourcesJar(true)
+        }
+    }
+}
+
+// Dokka's Javadoc generator can't emit for KMP; publish its HTML output as the
+// javadoc jar (what KMP libs like kotlinx ship).
+def dokkaHtml = tasks.named('dokkaGenerateHtml')
+def javadocJarProvider = tasks.register('javadocJar', Jar) {
+    archiveClassifier = 'javadoc'
+    dependsOn dokkaHtml
+    from layout.buildDirectory.dir('dokka/html')
+}
+
+publishing {
+    publications.withType(MavenPublication).configureEach {
+        if (name == 'jvm') {
+            artifact javadocJarProvider
+        }
+        pom {
+            name = project.name
+            description = descriptionValue
+            url = 'https://github.com/mahdimerhi/KotlinTrace'
+            licenses {
+                license {
+                    name = 'Apache-2.0'
+                    url = 'https://www.apache.org/licenses/LICENSE-2.0.txt'
+                    distribution = 'repo'
+                }
+            }
+            developers {
+                developer {
+                    id = 'mahdimerhi'
+                    name = 'Mahdi Merhi'
+                    email = 'mahdi.merhi99@hotmail.com'
+                }
+            }
+            scm {
+                connection = 'scm:git:git@github.com:mahdimerhi/KotlinTrace.git'
+                developerConnection = 'scm:git:git@github.com:mahdimerhi/KotlinTrace.git'
+                url = 'https://github.com/mahdimerhi/KotlinTrace'
+            }
+        }
+    }
+
+    // All modules stage into one shared repo so the root `assembleCentralBundle`
+    // task can zip it into the deployment bundle the Central Portal accepts.
+    repositories {
+        maven {
+            name = 'centralStaging'
+            url = uri(rootProject.layout.buildDirectory.dir('central-staging'))
+        }
+    }
+}
+
+signing {
+    def signingKey = providers.gradleProperty("signing.key")
+    def signingPassword = providers.gradleProperty("signing.password")
+    if (signingKey.isPresent() && signingPassword.isPresent()) {
+        useInMemoryPgpKeys(signingKey.get(), signingPassword.get())
+        sign publishing.publications
+    } else {
+        logger.warn("Signing skipped: set signing.key/signing.password " +
+                "(e.g. ORG_GRADLE_PROJECT_signingKey) to publish to Maven Central.")
+    }
+}

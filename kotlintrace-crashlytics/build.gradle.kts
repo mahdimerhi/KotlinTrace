@@ -2,7 +2,10 @@
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.dokka)
 }
+
+apply(from = rootProject.file("gradle/publish.gradle"))
 
 kotlin {
     compilerOptions {
@@ -24,7 +27,7 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            implementation(project(":"))
+            api(project(":"))
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
