@@ -88,7 +88,9 @@ publishing {
 
 signing {
     def signingKey = providers.gradleProperty("signing.key")
+            .orElse(providers.gradleProperty("signingKey"))
     def signingPassword = providers.gradleProperty("signing.password")
+            .orElse(providers.gradleProperty("signingPassword"))
     if (signingKey.isPresent() && signingPassword.isPresent()) {
         useInMemoryPgpKeys(signingKey.get(), signingPassword.get())
         sign publishing.publications
