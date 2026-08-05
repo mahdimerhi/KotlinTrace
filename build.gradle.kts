@@ -16,15 +16,32 @@ apiValidation {
 // Assembles the Maven Central deployment bundle: one zip containing the Maven
 // repository layout (group/module/version/{pom,module,jars,sources,javadoc,asc})
 // that the Central Portal accepts via its Publisher API.
+// The staging repository accumulates across builds, so wipe it before any
+// publication re-populates it, then zip the result into the bundle.
+val cleanCentralStaging = tasks.register<Delete>("cleanCentralStaging") {
+    delete(layout.buildDirectory.dir("central-staging"))
+}
+
 tasks.register<Zip>("assembleCentralBundle") {
     group = "publishing"
     description = "Assemble the Maven Central deployment bundle for the Central Portal."
     val published = subprojects.filter { it.name.startsWith("kotlintrace") }
+    dependsOn(cleanCentralStaging)
     dependsOn(":publishAllPublicationsToCentralStagingRepository")
     published.forEach { dependsOn("${it.path}:publishAllPublicationsToCentralStagingRepository") }
     from(layout.buildDirectory.dir("central-staging"))
     archiveFileName.set("kotlintrace-central-bundle.zip")
     destinationDirectory.set(layout.buildDirectory.dir("central"))
+}
+
+// Ensure the wipe runs before any module re-publishes into the staging repo
+// (wired after the module is evaluated, when its publish tasks exist).
+subprojects.filter { it.name.startsWith("kotlintrace") }.forEach { p ->
+    p.afterEvaluate {
+        p.tasks.named("publishAllPublicationsToCentralStagingRepository").configure {
+            dependsOn(cleanCentralStaging)
+        }
+    }
 }
 
 kotlin {

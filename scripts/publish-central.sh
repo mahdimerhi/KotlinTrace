@@ -3,7 +3,7 @@
 # Central Portal and polls it to PUBLISHED / FAILED.
 #
 # Prerequisites:
-#   - A namespace verified at central.sonatype.com (e.g. dev.kotlintrace)
+#   - A namespace verified at central.sonatype.com (e.g. io.github.mahdimerhi)
 #   - A Portal user token exported as SONATYPE_TOKEN = "<username>:<password>"
 #   - GPG-signed artifacts: run assembleCentralBundle with signing.key /
 #     signing.password set (the portal rejects unsigned bundles)
@@ -35,12 +35,19 @@ RESP="$(curl -sS --request POST \
     --form name=kotlintrace \
     "$UPLOAD_URL")"
 
-DEPLOYMENT_ID="$(printf '%s' "$RESP" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d["deploymentId"])')"
+DEPLOYMENT_ID="$(printf '%s' "$RESP" | python3 -c '
+import sys, json
+raw = sys.stdin.read().strip()
+try:
+    print(json.loads(raw)["deploymentId"])
+except Exception:
+    print(raw)
+')"
 echo "Deployment accepted: id=$DEPLOYMENT_ID"
 
 for i in $(seq 1 18); do
     sleep 10
-    STATE="$(curl -sS --get --header "$AUTH" --data-urlencode "id=${DEPLOYMENT_ID}" "$STATUS_URL" \
+    STATE="$(curl -sS --request POST --header "$AUTH" --data-urlencode "id=${DEPLOYMENT_ID}" "$STATUS_URL" \
         | python3 -c 'import sys,json; print(json.load(sys.stdin)["deploymentState"])')"
     echo "[$((10 * i))s] state=$STATE"
     case "$STATE" in
