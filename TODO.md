@@ -113,9 +113,15 @@
     `KotlinTraceExceptionReport`, `KotlinTraceReportFrame`,
     `KotlinTraceReportFormatter`, plus the three `install*()` adapters.
 
+- [x] **CI (GitHub Actions)**
+  - `.github/workflows/ci.yml`: on push to `main` / PR — macOS runner, JDK
+    17, cached Gradle + Kotlin/Native toolchain, `./gradlew build`
+    (JVM tests + `apiCheck` + all iOS targets). Sanity: the branch that
+    enables CI must include the BCV+KDoc commit, otherwise `build` fails on
+    the missing `.api` dumps.
+
 ## Later (roadmap Phase 3/4)
 
-- [ ] CI (GitHub Actions: build, test, publish snapshot)
 - [ ] Publish pipeline to Maven Central (3.2)
 - [ ] Android/JVM targets (4.1)
 - [ ] Coroutine diagnostic module (4.2)
