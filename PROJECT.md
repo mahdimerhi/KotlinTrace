@@ -142,7 +142,16 @@ KotlinTrace.installSentry()      // extension in :kotlintrace-sentry
        upload. **Done (2026-08-03)**: crash on the iOS 27.0 simulator produced a
        Sentry event with demangled Kotlin frames, delivered to the Sentry
        ingest API (HTTP 200; sentry.io project `apple-ios`).
-- [ ] 2.3 Bugsnag adapter module (`:kotlintrace-bugsnag`) *(lowest priority)*
+- [x] 2.3 Bugsnag adapter module (`:kotlintrace-bugsnag`) *(lowest priority)*
+       — **Done (2026-08-05)**: runtime-lookup cinterop to bugsnag-cocoa
+       (`notifyError:block:`), rewrite trace before upload. Forces
+       `event.deliveryStrategy = StoreAndSend` + `unhandled = YES` in the notify
+       block so the payload persists to disk and is delivered synchronously
+       inside the 1 s crash-time window; a stored event survives death and is
+       retried on the next launch. Crash on the iOS 27.0 simulator produced a
+       Bugsnag event (`unhandled: true`, `IllegalStateException`) with demangled
+       `CrashBot.kt:33` / `CrashBot.kt:29` frames (payload captured on disk;
+       uploaded + file removed on success).
 - [x] 2.4 Sample CMP iOS app with a crash button; run it twice — once with the
        adapter linked, once without — and capture before/after evidence of the
        Crashlytics report (mangled vs demangled frames). **Done (2026-08-03):
@@ -246,6 +255,38 @@ Built in-repo (committed):
   One build, two reports: same app binary always links the adapter; the "raw"
   run just skips the install call.
 - `GoogleService-Info.plist` is gitignored (secret).
+
+### Crash report quality — single demangled event per crash (device-verified)
+
+The first device runs exposed two problems: the hook chained the K/N `abort()`
+(after reporting, the default terminate handler ran anyway), and every report
+opened with runtime bootstrap noise. Now:
+
+- **One event per crash.** `PlatformHook.apple.kt` reports to all backends,
+  sleeps ~1 s (crash-time window), then calls `kotlin.system.exitProcess(1)`
+  instead of chaining `abort()`. Crashlytics' mach handler has no public
+  disable API, so aborting produced a *second*, duplicate SIGABRT event with
+  mangled symbols. Verified on simulator and on a physical iPhone X (iOS 16.7):
+  exactly one non-fatal event per crash, no SIGABRT.
+- **Native noise frames dropped** (`KotlinTraceReportFormatter.kt`): with the
+  demangler active, non-`kfun:` bridge frames (pthread/libsystem, hex-encoded
+  path-symbol trampoline) are omitted.
+- **Runtime bootstrap frames dropped**: `kotlin.*.<init>` constructors and
+  `kotlin.Function0.invoke` trampolines carry no diagnostic value and would
+  otherwise own the report headline (`kotlin.Throwable.<init>`). The report now
+  leads with the first application frame (`CrashBot.crash`).
+- **File:line on device** — the libbacktrace source-info hook is no longer
+  simulator-only (`SourceInfoHook.apple.kt` guard removed; verified on device:
+  `CrashBot.crash + 33 (CrashBot.kt:33)`).
+- **dSYM embedded in the app** for all configurations
+  (`project.pbxproj` dSYM-embed phase), required by the path-based lookup.
+- Sample app buttons: "Crash (demangled via KotlinTrace → Crashlytics / Sentry /
+  Bugsnag)" and "Crash (raw, no KotlinTrace)"; dark background, `borderedProminent`
+  style.
+
+Trade-off (Crashlytics SDK limitation, not KotlinTrace): only `recordException:`
+is public, so readable reports are classified **Non-fatal**; the native
+SIGABRT "Crash" is the one KotlinTrace removes.
 
 ### Sample app — Sentry integration (added with roadmap 2.2)
 

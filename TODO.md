@@ -72,9 +72,33 @@
   - **Acceptance met**: one KotlinTrace event per crash, demangled frames in
     Sentry
 
-## Next up
+- [x] **Bugsnag adapter (roadmap 2.3)**
+  - `:kotlintrace-bugsnag` module, runtime-lookup cinterop (mirrors
+    Crashlytics/Sentry), `installBugsnag()` on `KotlinTrace`
+  - Evidence (`-bugsnagcrash`, iOS 27.0 sim): `notifyError:block:` with
+    `event.deliveryStrategy = StoreAndSend` + `unhandled = YES` — payload is
+    written to `v1/events/*.json` AND upload is attempted synchronously inside
+    the 1 s crash-time window; a stored event survives process death and is
+    retried on the next launch (verified: file deleted only on upload success,
+    leftover file from a timed-out run flushed on relaunch)
+  - Captured payload: `unhandled: true`, demangled `IllegalStateException`,
+    `CrashBot.kt:33` / `CrashBot.kt:29` frames, 13 frames total
+  - **Acceptance met**: one KotlinTrace event per crash, demangled frames, no
+    duplicate native event (Bugsnag `autoDetectErrors = false` in the sample)
 
-- [ ] **Bugsnag adapter (roadmap 2.3)** — lowest priority
+- [x] **Crash report readability fixes** (device-verified iPhone X, iOS 16.7;
+  Xcode 26.6. `./gradlew build` green)
+  - One event per crash: hook reports then `kotlin.system.exitProcess(1)`
+    instead of chaining `abort()` (previously produced a duplicate mangled
+    SIGABRT via Crashlytics' mach handler — verified before/after)
+  - Noise frames dropped when demangling enabled (non-`kfun:` bridge frames)
+  - Runtime bootstrap frames dropped: `kotlin.*.<init>` constructors and
+    `kotlin.Function0.invoke` trampolines → report leads with the first app
+    frame (`CrashBot.crash`), not `kotlin.Throwable.<init>`
+  - Source info enabled on device (libbacktrace hook, sim-only guard removed);
+    dSYM-embed phase now covers all configurations
+  - **Acceptance met**: single readable non-fatal event with demangled frames +
+    `(CrashBot.kt:33)` on device; raw button still produces the native SIGABRT
 
 ## Later (roadmap Phase 3/4)
 

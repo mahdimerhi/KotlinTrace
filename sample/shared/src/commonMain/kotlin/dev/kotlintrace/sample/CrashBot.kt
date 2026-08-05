@@ -3,6 +3,7 @@
 package dev.kotlintrace.sample
 
 import dev.kotlintrace.KotlinTrace
+import dev.kotlintrace.bugsnag.installBugsnag
 import dev.kotlintrace.crashlytics.installCrashlytics
 import dev.kotlintrace.sentry.installSentry
 
@@ -15,6 +16,10 @@ object CrashBot {
 
     fun setupSentry() {
         KotlinTrace.installSentry()
+    }
+
+    fun setupBugsnag() {
+        KotlinTrace.installBugsnag()
     }
 
     // Crashes on a Kotlin/Native thread so the uncaught-exception hook fires

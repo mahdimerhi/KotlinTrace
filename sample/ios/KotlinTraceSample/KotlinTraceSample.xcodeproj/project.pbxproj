@@ -3,13 +3,14 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 110;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
 		11FF870C301E9C730049DBAB /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = 11FF870B301E9C730049DBAB /* FirebaseCrashlytics */; };
 		11FF870F301E9CF40049DBAB /* SampleShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 11FF870E301E9CF40049DBAB /* SampleShared.framework */; };
 		4C6BB91DFD04402AABF97018 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = B6F72C224D2B4EFF8F6F42FC /* Sentry */; };
+		E9F0A1B2C3D4E5F6A7B8C9D0 /* Bugsnag in Frameworks */ = {isa = PBXBuildFile; productRef = D7E8F9A0B1C2D3E4F5A6B7C8 /* Bugsnag */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,8 +31,8 @@
 			isa = PBXFrameworksBuildPhase;
 			files = (
 				11FF870C301E9C730049DBAB /* FirebaseCrashlytics in Frameworks */,
-				11FF870F301E9CF40049DBAB /* SampleShared.framework in Frameworks */,
 				4C6BB91DFD04402AABF97018 /* Sentry in Frameworks */,
+				E9F0A1B2C3D4E5F6A7B8C9D0 /* Bugsnag in Frameworks */,
 			);
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -118,6 +119,7 @@
 			packageReferences = (
 				11FF870A301E9C730049DBAB /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				E01CEEA43D4742BB84120126 /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
+				B4C5D6E7F8091A2B3C4D5E6F /* XCRemoteSwiftPackageReference "bugsnag-cocoa" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 11FF86CE301E97B90049DBAB /* Products */;
@@ -168,54 +170,49 @@
 			shellPath = /bin/sh;
 			shellScript = (
 				"# Embed the dSYM in the app bundle so Kotlin/Native's libbacktrace source-info",
-				"# backend (simulator workaround) finds it next to the executable:",
+				"# backend finds it next to the executable (simulators AND devices;",
+				"# Xcode strips __debug_* from installed binaries):",
 				"# <app>/KotlinTraceSample.dSYM/Contents/Resources/DWARF/KotlinTraceSample",
 				"set -e",
-				"if [ \"${CONFIGURATION}\" = \"Debug\" ]; then",
-				"  DSYM_SRC=\"${DWARF_DSYM_FOLDER_PATH}/${PRODUCT_NAME}.app.dSYM\"",
-				"  if [ ! -d \"${DSYM_SRC}\" ]; then",
-				"    DSYM_SRC=\"${DWARF_DSYM_FOLDER_PATH}/${EXECUTABLE_NAME}.dSYM\"",
-				"  fi",
-				"  DSYM_DST=\"${TARGET_BUILD_DIR}/${WRAPPER_NAME}/${EXECUTABLE_NAME}.dSYM\"",
-				"  if [ -d \"${DSYM_SRC}\" ]; then",
-				"    rm -rf \"${DSYM_DST}\"",
-				"    cp -R \"${DSYM_SRC}\" \"${DSYM_DST}\"",
-				"  else",
-				"    echo \"warning: no dSYM found at ${DWARF_DSYM_FOLDER_PATH} to embed\"",
-				"  fi",
+				"DSYM_SRC=\"${DWARF_DSYM_FOLDER_PATH}/${PRODUCT_NAME}.app.dSYM\"",
+				"if [ ! -d \"${DSYM_SRC}\" ]; then",
+				"  DSYM_SRC=\"${DWARF_DSYM_FOLDER_PATH}/${EXECUTABLE_NAME}.dSYM\"",
+				"fi",
+				"DSYM_DST=\"${TARGET_BUILD_DIR}/${WRAPPER_NAME}/${EXECUTABLE_NAME}.dSYM\"",
+				"if [ -d \"${DSYM_SRC}\" ]; then",
+				"  rm -rf \"${DSYM_DST}\"",
+				"  cp -R \"${DSYM_SRC}\" \"${DSYM_DST}\"",
+				"else",
+				"  echo \"warning: no dSYM found at ${DWARF_DSYM_FOLDER_PATH} to embed\"",
 				"fi",
 				"",
 			);
 		};
 		6F093C6F08BE4BF7A1428305 /* Upload Debug Symbols to Sentry */ = {
 			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
 			inputPaths = (
 				"${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}/Contents/Resources/DWARF/${TARGET_NAME}",
 			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "# This script is responsible for uploading debug symbols and source context for Sentry.
-if [[ \"$(uname -m)\" == arm64 ]]; then
-  export PATH=\"/opt/homebrew/bin:$PATH\"
-fi
-
-if which sentry-cli >/dev/null; then
-  export SENTRY_ORG=na-q2i
-  export SENTRY_PROJECT=apple-ios
-  ERROR=$(sentry-cli debug-files upload --include-sources \"$DWARF_DSYM_FOLDER_PATH\" 2>&1 >/dev/null)
-  if [ ! $? -eq 0 ]; then
-    echo \"warning: sentry-cli - $ERROR\"
-  fi
-else
-  echo \"warning: sentry-cli not installed, download from https://github.com/getsentry/sentry-cli/releases\"
-fi
-";
 			name = "Upload Debug Symbols to Sentry";
+			shellPath = /bin/sh;
+			shellScript = (
+				"# This script is responsible for uploading debug symbols and source context for Sentry.",
+				"if [[ \"$(uname -m)\" == arm64 ]]; then",
+				"  export PATH=\"/opt/homebrew/bin:$PATH\"",
+				"fi",
+				"",
+				"if which sentry-cli >/dev/null; then",
+				"  export SENTRY_ORG=na-q2i",
+				"  export SENTRY_PROJECT=apple-ios",
+				"  ERROR=$(sentry-cli debug-files upload --include-sources \"$DWARF_DSYM_FOLDER_PATH\" 2>&1 >/dev/null)",
+				"  if [ ! $? -eq 0 ]; then",
+				"    echo \"warning: sentry-cli - $ERROR\"",
+				"  fi",
+				"else",
+				"  echo \"warning: sentry-cli not installed, download from https://github.com/getsentry/sentry-cli/releases\"",
+				"fi",
+				"",
+			);
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -354,35 +351,45 @@ fi
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 4J987P46GX;
 				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_PREVIEWS = YES;
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					"-ObjC",
-				);
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.7;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
+				);
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+					"-framework",
+					SampleShared,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = dev.kotlintrace.sample;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				ENABLE_USER_SCRIPT_SANDBOXING = "NO";
 			};
 			name = Debug;
 		};
@@ -393,34 +400,44 @@ fi
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 4J987P46GX;
 				ENABLE_PREVIEWS = YES;
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					"-ObjC",
-				);
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.7;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
+				);
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+					"-framework",
+					SampleShared,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = dev.kotlintrace.sample;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				ENABLE_USER_SCRIPT_SANDBOXING = "NO";
 			};
 			name = Release;
 		};
@@ -454,6 +471,14 @@ fi
 				minimumVersion = 12.17.0;
 			};
 		};
+		B4C5D6E7F8091A2B3C4D5E6F /* XCRemoteSwiftPackageReference "bugsnag-cocoa" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/bugsnag/bugsnag-cocoa/";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 6.36.0;
+			};
+		};
 		E01CEEA43D4742BB84120126 /* XCRemoteSwiftPackageReference "sentry-cocoa" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/getsentry/sentry-cocoa/";
@@ -461,6 +486,8 @@ fi
 				kind = upToNextMajorVersion;
 				minimumVersion = 9.0.0;
 			};
+			traits = (
+			);
 		};
 /* End XCRemoteSwiftPackageReference section */
 
@@ -474,6 +501,11 @@ fi
 			isa = XCSwiftPackageProductDependency;
 			package = E01CEEA43D4742BB84120126 /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
 			productName = Sentry;
+		};
+		D7E8F9A0B1C2D3E4F5A6B7C8 /* Bugsnag */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B4C5D6E7F8091A2B3C4D5E6F /* XCRemoteSwiftPackageReference "bugsnag-cocoa" */;
+			productName = Bugsnag;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

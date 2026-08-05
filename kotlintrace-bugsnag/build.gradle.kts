@@ -19,22 +19,12 @@ kotlin {
     iosX64()
 
     targets.withType<org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget>().configureEach {
-        binaries.framework {
-            baseName = "SampleShared"
-            isStatic = true
-        }
+        compilations.getByName("main").cinterops.create("bugsnag")
     }
 
-    // KT-75992: the simulator's CoreSymbolication backend is broken, so the
-    // KotlinTrace library redirects the runtime's source-info dispatcher to
-    // the bundled libbacktrace backend and resolves file:line from the dSYM
-    // embedded in the app bundle (see dev.kotlintrace.SourceInfoHook).
     sourceSets {
         commonMain.dependencies {
             implementation(project(":"))
-            implementation(project(":kotlintrace-crashlytics"))
-            implementation(project(":kotlintrace-sentry"))
-            implementation(project(":kotlintrace-bugsnag"))
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

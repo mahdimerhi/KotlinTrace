@@ -1,0 +1,105 @@
+// Runtime-lookup Bugsnag bindings, mirroring the Crashlytics/Sentry adapters:
+// classes and methods are resolved at runtime so this module never needs
+// bugsnag-cocoa at compile or link time. Uses only public Bugsnag APIs:
+//   Bugsnag.isStarted / notifyError:block:
+//   BugsnagError (errorClass, errorMessage, stacktrace)
+//   BugsnagStackframe (method, file, lineNumber)
+// The notify block replaces event.errors with the KotlinTrace error and
+// marks the event unhandled + forces the StoreAndSend delivery strategy.
+// notifyError: produces a *handled* event, whose delivery strategy derives
+// from handledState.originalUnhandledValue (read-only here), so SendImmediately
+// would be used by default — an async upload that dies with the aborting
+// process. Setting event.deliveryStrategy in the block runs *before*
+// [BugsnagEvent deliveryStrategy] is evaluated (BugsnagClient notifyInternal),
+// so StoreAndSend is honoured: the payload is written to disk (v1/events)
+// BEFORE the process aborts, and a stored event is retried at the next launch.
+
+package = dev.kotlintrace.bugsnag
+language = Objective-C
+
+---
+
+#import <Foundation/Foundation.h>
+
+static Class KotlinTraceBugsnagLoadClass(NSString* name) {
+    Class cls = NSClassFromString(name);
+    if (!cls) {
+        @throw [NSException exceptionWithName:@"KotlinTraceBugsnagUnavailable"
+            reason:[NSString stringWithFormat:@"Bugsnag class '%@' not found. Link bugsnag-cocoa before using KotlinTrace.", name]
+            userInfo:nil];
+    }
+    return cls;
+}
+
+void KotlinTraceCheckBugsnagDependencies(void) {
+    Class cls = KotlinTraceBugsnagLoadClass(@"Bugsnag");
+    SEL startedSel = NSSelectorFromString(@"isStarted");
+    if (![cls methodForSelector:startedSel]) {
+        @throw [NSException exceptionWithName:@"KotlinTraceBugsnagMethodMissing"
+            reason:@"Bugsnag method 'isStarted' not found. The installed Bugsnag version may be too old."
+            userInfo:nil];
+    }
+    BOOL (*isStartedFn)(id, SEL) = (BOOL (*)(id, SEL))[cls methodForSelector:startedSel];
+    if (!isStartedFn(cls, startedSel)) {
+        @throw [NSException exceptionWithName:@"KotlinTraceBugsnagNotStarted"
+            reason:@"Bugsnag is linked but not started. Call Bugsnag.start(...) before KotlinTrace.installBugsnag()."
+            userInfo:nil];
+    }
+}
+
+void KotlinTraceRecordBugsnagEvent(NSString* name, NSString* reason, NSString* framesText) {
+    @try {
+        Class bugsnagClass = KotlinTraceBugsnagLoadClass(@"Bugsnag");
+        Class errorClass = KotlinTraceBugsnagLoadClass(@"BugsnagError");
+        Class frameClass = KotlinTraceBugsnagLoadClass(@"BugsnagStackframe");
+
+        SEL notifySel = NSSelectorFromString(@"notifyError:block:");
+        if (![bugsnagClass methodForSelector:notifySel]) {
+            @throw [NSException exceptionWithName:@"KotlinTraceBugsnagMethodMissing"
+                reason:@"Bugsnag method 'notifyError:block:' not found. The installed Bugsnag version may be too old."
+                userInfo:nil];
+        }
+        void (*notifyFn)(id, SEL, id, id) = (void (*)(id, SEL, id, id))[bugsnagClass methodForSelector:notifySel];
+
+        NSMutableArray* frames = [NSMutableArray array];
+        for (NSString* record in [framesText componentsSeparatedByString:@"\n"]) {
+            if ([record length] == 0) continue;
+            NSArray* parts = [record componentsSeparatedByString:@"|"];
+            id frame = [[frameClass alloc] init];
+            if ([parts count] > 0 && [[parts objectAtIndex:0] length] > 0) {
+                [frame setValue:[parts objectAtIndex:0] forKey:@"method"];
+            }
+            if ([parts count] > 1 && [[parts objectAtIndex:1] length] > 0) {
+                [frame setValue:[parts objectAtIndex:1] forKey:@"file"];
+            }
+            if ([parts count] > 2 && [[parts objectAtIndex:2] length] > 0) {
+                [frame setValue:@([[parts objectAtIndex:2] integerValue]) forKey:@"lineNumber"];
+            }
+            [frames addObject:frame];
+        }
+
+        id error = [[errorClass alloc] init];
+        [error setValue:name forKey:@"errorClass"];
+        [error setValue:reason forKey:@"errorMessage"];
+        [error setValue:frames forKey:@"stacktrace"];
+
+        id nsError = [NSError errorWithDomain:@"dev.kotlintrace.KotlinTrace"
+                                         code:0
+                                     userInfo:@{ NSLocalizedDescriptionKey: reason }];
+
+        BOOL (^onError)(id) = ^BOOL(id event) {
+            [event setValue:@[ error ] forKey:@"errors"];
+            [event setValue:@YES forKey:@"unhandled"];
+            // StoreOnly=0, StoreAndFlush=1, StoreAndSend=2, SendImmediately=3.
+            // Forced BEFORE BugsnagClient computes the strategy, so the payload
+            // is persisted to disk before the process aborts (see header note).
+            [event setValue:@(2) forKey:@"deliveryStrategy"];
+            return YES;
+        };
+
+        notifyFn(bugsnagClass, notifySel, nsError, onError);
+    } @catch (NSException* e) {
+        // The uncaught-exception hook must never die here; swallow and let
+        // the process terminate normally.
+    }
+}

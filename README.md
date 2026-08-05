@@ -8,9 +8,9 @@ file/line). KotlinTrace fixes the readability layer client-side — no backend r
 
 ## Status
 
-Crashlytics and Sentry adapters shipped: Kotlin/Native uncaught-exception hook, client-side
+Crashlytics, Sentry, and Bugsnag adapters shipped: Kotlin/Native uncaught-exception hook, client-side
 frame demangling, and real source `(File.kt:line)` on device and simulator — proven
-end-to-end in the sample app (see [PROJECT.md](PROJECT.md)). Bugsnag adapter planned.
+end-to-end in the sample app (see [PROJECT.md](PROJECT.md)).
 
 ## Usage
 

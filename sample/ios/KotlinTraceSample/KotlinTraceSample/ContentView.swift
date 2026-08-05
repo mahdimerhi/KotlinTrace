@@ -12,11 +12,21 @@ struct ContentView: View {
                 CrashBot.shared.setupSentry()
                 CrashBot.shared.triggerCrash()
             }
+            Button("Crash (demangled via KotlinTrace → Bugsnag)") {
+                CrashBot.shared.setupBugsnag()
+                CrashBot.shared.triggerCrash()
+            }
             Button("Crash (raw, no KotlinTrace)") {
                 CrashBot.shared.triggerCrash()
             }
         }
-        .padding()
+        .buttonStyle(.borderedProminent)
+        .tint(Color(red: 1.0, green: 0.55, blue: 0.1))
+        .font(.headline)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black)
+        .foregroundStyle(.white)
+        .preferredColorScheme(.dark)
     }
 }
 
