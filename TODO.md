@@ -150,20 +150,9 @@
 
 ---
 
-## Verification commands (this Mac)
+## Verification
 
-- `./gradlew build` — full build (JVM tests + all iOS targets compile/link)
-- `./gradlew jvmTest` — pure-logic tests (JVM host)
-- iOS *test* tasks are intentionally disabled (sample evidence runs on the
-  iOS 27.0 simulator instead); re-enabling is a separate decision
-
-## Environment notes
-
-- iOS 27.0 simulator runtime installed (device `84A8EC82-8361-4BEC-86FA-234A2393DA2E`);
-  iOS K/N *test* tasks stay disabled by choice, see Verification commands
-- CocoaPods 1.16.2 installed (needed only if the sample app or a future
-  adapter uses the cocoapods plugin)
-- **xcodegen NOT installed** → sample app Xcode project is hand-created in
-  Xcode (see PROJECT.md "Sample app" section for the exact steps)
-- Firebase Crashlytics integration of the adapter requires NO Firebase
-  dependency at build time (runtime lookup) — only the app itself must link it
+- `./gradlew build` (full build + `apiCheck`) and `./gradlew jvmTest`.
+- iOS K/N target *test* tasks stay disabled by choice — evidence runs instead on
+  real iOS builds (simulator + device); see PROJECT.md "Sample app" / 1.7.
+- Sample Xcode project is hand-created (no xcodegen) — see PROJECT.md "Sample app".
