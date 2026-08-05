@@ -1,0 +1,5 @@
+public final class dev/kotlintrace/sentry/SentryBackendKt {
+	public static final fun installSentry (Ldev/kotlintrace/KotlinTrace;ZZ)V
+	public static synthetic fun installSentry$default (Ldev/kotlintrace/KotlinTrace;ZZILjava/lang/Object;)V
+}
+

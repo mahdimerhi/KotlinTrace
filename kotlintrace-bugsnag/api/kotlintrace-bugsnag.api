@@ -1,0 +1,5 @@
+public final class dev/kotlintrace/bugsnag/BugsnagBackendKt {
+	public static final fun installBugsnag (Ldev/kotlintrace/KotlinTrace;ZZ)V
+	public static synthetic fun installBugsnag$default (Ldev/kotlintrace/KotlinTrace;ZZILjava/lang/Object;)V
+}
+

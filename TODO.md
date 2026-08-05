@@ -100,10 +100,22 @@
   - **Acceptance met**: single readable non-fatal event with demangled frames +
     `(CrashBot.kt:33)` on device; raw button still produces the native SIGABRT
 
+- [x] **Binary-compatibility-validator + KDoc (roadmap 3.1)**
+  - BCV plugin 0.18.1 applied at root only (auto-configures subprojects;
+    applying per-module double-applies and fails configuring `bcv-rt-jvm-cp`);
+    `ignoredProjects` = sample/shared; JVM dumps committed for `kotlintrace`,
+    `kotlintrace-crashlytics`, `kotlintrace-sentry`, `kotlintrace-bugsnag`;
+    `apiCheck` wired into `check`. Kotlin ABI (klib) validation not yet
+    enabled — kotlinlang needs it experimental opt-in.
+  - KDoc on the full public surface: `Backend`, `KotlinTrace` (+ install /
+    registerBackend), `KotlinTraceOptions`, `KotlinTraceDemangler`,
+    `DefaultKotlinTraceDemangler`, `KotlinTraceFrame`,
+    `KotlinTraceExceptionReport`, `KotlinTraceReportFrame`,
+    `KotlinTraceReportFormatter`, plus the three `install*()` adapters.
+
 ## Later (roadmap Phase 3/4)
 
 - [ ] CI (GitHub Actions: build, test, publish snapshot)
-- [ ] Binary-compatibility-validator + KDoc (3.1)
 - [ ] Publish pipeline to Maven Central (3.2)
 - [ ] Android/JVM targets (4.1)
 - [ ] Coroutine diagnostic module (4.2)

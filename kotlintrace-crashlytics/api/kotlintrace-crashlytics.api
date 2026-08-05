@@ -1,0 +1,5 @@
+public final class dev/kotlintrace/crashlytics/CrashlyticsBackendKt {
+	public static final fun installCrashlytics (Ldev/kotlintrace/KotlinTrace;ZZ)V
+	public static synthetic fun installCrashlytics$default (Ldev/kotlintrace/KotlinTrace;ZZILjava/lang/Object;)V
+}
+

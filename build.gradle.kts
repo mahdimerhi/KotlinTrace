@@ -1,5 +1,12 @@
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.binary.compatibility.validator)
+}
+
+// The demo module is not published; its public surface is not part of the
+// library ABI contract.
+apiValidation {
+    ignoredProjects += listOf("sample", "shared")
 }
 
 kotlin {
