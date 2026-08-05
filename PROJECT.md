@@ -1,4 +1,4 @@
-# KotlinTrace — KMP Crash Trace Readability SDK (working title)
+# KotlinTrace — KMP Crash Trace Readability SDK
 
 > Planning document + task list for building a KMP library that makes Kotlin/Native
 > crash stack traces readable in Firebase Crashlytics, Sentry, and Bugsnag.
@@ -369,11 +369,46 @@ frames, mechanism `kotlintrace`, environment `simulator-demo` — **met
 
 ## Phase 3 — Polish & Release
 
-- [ ] 3.1 API validation (binary-compatibility-validator) + KDoc
-- [ ] 3.2 Publish pipeline to Maven Central (Sonatype), versioning strategy
-- [ ] 3.3 CI (GitHub Actions: build, test, publish snapshot)
-- [ ] 3.4 Public docs site / README with usage + evidence screenshots
-- [ ] 3.5 v0.1.0 release
+- [x] 3.1 API validation (binary-compatibility-validator) + KDoc
+- [x] 3.2 Publish pipeline to Maven Central (Sonatype), versioning strategy
+- [x] 3.3 CI (GitHub Actions: build, test, publish snapshot)
+- [x] 3.4 Public docs site / README with usage + evidence screenshots
+- [x] 3.5 v0.1.0 release
+
+### Publishing (roadmap 3.2) — done (2026-08-06)
+
+- **Coordinates**: `io.github.mahdimerhi:kotlintrace[:suffix]:0.1.0` are live on
+  Maven Central (`repo1.maven.org`). Modules: `kotlintrace` (core),
+  `kotlintrace-crashlytics`, `kotlintrace-sentry`, `kotlintrace-bugsnag`; KMP
+  variants `-jvm`, `-iosarm64`, `-iosx64`, `-iossimulatorarm64` (klib + cinterop).
+- **Namespace**: the original `dev.kotlintrace` groupId was rejected by the Central
+  Portal (`Namespace 'dev.kotlintrace' is not allowed` — it needs a DNS TXT record
+  on the `kotlintrace.dev` domain). Switched to `io.github.mahdimerhi`, which is
+  auto-verified for accounts that signed up with their GitHub identity. Kotlin
+  **package** names remain `dev.kotlintrace` (packages ≠ Maven groupId).
+- **Release flow**:
+  ```
+  ./gradlew assembleCentralBundle           # re-publishes + zips signed bundle
+  scripts/publish-central.sh                # uploads + polls to PUBLISHED
+  ```
+  Requires (not committed): `SONATYPE_TOKEN` (portal token `user:pass`) and the
+  GPG key via `ORG_GRADLE_PROJECT_signingKey` / `signingPassword` (exported in
+  `~/.zshrc` on the authoring Mac).
+- **Pipeline details / gotchas** (all encoded in `gradle/publish.gradle`,
+  `build.gradle.kts`, `scripts/publish-central.sh`):
+  - KGP 2.3: `withSourcesJar(true)` (boolean arg); `withJavadocJar()` removed.
+  - Dokka's Javadoc generator can't emit for KMP → the javadoc jar ships Dokka's
+    `dokkaGenerateHtml` output (what kotlinx libs do); empty until Dokka 2.x.
+  - Convention is **Groovy** (`gradle/publish.gradle`): scripts pulled in via
+    `apply(from=...)` compile without Kotlin DSL accessors.
+  - Bundle must not hold stale namespaces: `assembleCentralBundle` wipes
+    `build/central-staging` (`cleanCentralStaging`) before modules re-publish.
+  - Portal API: upload returns the deploymentId as **plain text** (not JSON); the
+    status endpoint wants a **POST** body (`--data-urlencode id=...`); GET returns
+    500 while another (older) deployment is in flight.
+  - A Gradle signGradle task evaluates `signatory.keyId` → the in-memory PGP key
+    must be well-formed (newlines can't survive `gradle.properties` escaping, so
+    the key rides environment variables).
 
 ## Phase 4 — Expansion (post-MVP, optional)
 
@@ -413,15 +448,20 @@ frames, mechanism `kotlintrace`, environment `simulator-demo` — **met
 ```
 kotlintrace/
 ├── PROJECT.md            # planning + roadmap + todos
-├── README.md             # public-facing intro
+├── README.md             # public-facing intro (Maven coordinates, quick start)
 ├── LICENSE               # Apache-2.0
-├── build.gradle.kts      # KMP plugin, targets, sourceset wiring (core module)
-├── settings.gradle.kts   # rootProject, repos, includes :kotlintrace-crashlytics,
-│                         #   :kotlintrace-sentry, :sample:shared
+├── build.gradle.kts      # KMP plugin, targets, sourceset wiring (core module); assembleCentralBundle
+├── settings.gradle.kts   # rootProject "kotlintrace"; includes the 3 adapter modules + :sample:shared
 ├── gradle/
 │   ├── libs.versions.toml
+│   ├── publish.gradle    # Groovy publish/signing convention (maven-publish, pom, centralStaging)
+│   ├── gradle-daemon-jvm.properties
 │   └── wrapper/          # Gradle 9.6.1 wrapper (committed)
-├── src/                  # core library (artifact: kotlintrace)
+├── scripts/
+│   └── publish-central.sh # uploads build/central/…-bundle.zip → Central Portal, polls to PUBLISHED
+├── .github/workflows/ci.yml   # macOS runner: JDK 17, cached Gradle/Konan, ./gradlew build
+├── api/kotlintrace.api   # BCV dump (jvm ABI) — committed
+├── src/                  # core KMP module (artifact: kotlintrace)
 │   ├── commonMain/kotlin/dev/kotlintrace/
 │   │   ├── Backend.kt
 │   │   ├── DefaultKotlinTraceDemangler.kt
@@ -435,32 +475,44 @@ kotlintrace/
 │   │   ├── KotlinTraceReportFrame.kt
 │   │   └── PlatformHook.kt          # expect seam
 │   ├── appleMain/kotlin/dev/kotlintrace/PlatformHook.apple.kt   # real hook (setUnhandledExceptionHook)
-│   ├── appleMain/kotlin/dev/kotlintrace/SourceInfoHook.apple.kt # simulator libbacktrace hook (KT-75992)
+│   ├── appleMain/kotlin/dev/kotlintrace/SourceInfoHook.apple.kt # libbacktrace source-info hook (KT-75992)
 │   ├── jvmMain/kotlin/dev/kotlintrace/PlatformHook.jvm.kt
 │   └── commonTest/kotlin/dev/kotlintrace/
 │       ├── DefaultKotlinTraceDemanglerTest.kt
 │       ├── KotlinTraceReporterTest.kt
 │       └── KotlinTraceReportFormatterTest.kt
-├── src/nativeInterop/cinterop/sourceinfohook.{def,h}   # simulator source-info hook bindings (KT-75992)
-└── kotlintrace-crashlytics/         # Crashlytics adapter (artifact: kotlintrace-crashlytics)
-    ├── build.gradle.kts
-    └── src/
-        ├── commonMain/kotlin/dev/kotlintrace/crashlytics/
-        │   ├── CrashlyticsBackend.kt         # KotlinTrace.installCrashlytics()
-        │   └── CrashlyticsSink.kt            # expect seam
-        ├── appleMain/kotlin/dev/kotlintrace/crashlytics/CrashlyticsSink.apple.kt  # cinterop calls
-        ├── jvmMain/kotlin/dev/kotlintrace/crashlytics/CrashlyticsSink.jvm.kt      # no-op
-        └── nativeInterop/cinterop/crashlytics.def   # runtime-lookup shims
-└── kotlintrace-sentry/             # Sentry adapter (artifact: kotlintrace-sentry)
-    ├── build.gradle.kts
-    └── src/
-        ├── commonMain/kotlin/dev/kotlintrace/sentry/
-        │   ├── SentryBackend.kt             # KotlinTrace.installSentry()
-        │   └── SentrySink.kt                # expect seam
-        ├── appleMain/kotlin/dev/kotlintrace/sentry/SentrySink.apple.kt  # cinterop calls
-        ├── jvmMain/kotlin/dev/kotlintrace/sentry/SentrySink.jvm.kt      # no-op
-        └── nativeInterop/cinterop/sentry.def       # runtime-lookup shims
-└── sample/                # roadmap 2.4 demo (artifact: kotlintrace-sample-shared)
+├── src/nativeInterop/cinterop/sourceinfohook.{def,h}   # source-info hook bindings (KT-75992)
+├── kotlintrace-crashlytics/         # Crashlytics adapter (artifact: kotlintrace-crashlytics)
+│   ├── build.gradle.kts
+│   ├── api/kotlintrace-crashlytics.api   # BCV dump
+│   └── src/
+│       ├── commonMain/kotlin/dev/kotlintrace/crashlytics/
+│       │   ├── CrashlyticsBackend.kt         # KotlinTrace.installCrashlytics()
+│       │   └── CrashlyticsSink.kt            # expect seam
+│       ├── appleMain/kotlin/dev/kotlintrace/crashlytics/CrashlyticsSink.apple.kt  # cinterop calls
+│       ├── jvmMain/kotlin/dev/kotlintrace/crashlytics/CrashlyticsSink.jvm.kt      # no-op
+│       └── nativeInterop/cinterop/crashlytics.def   # runtime-lookup shims
+├── kotlintrace-sentry/             # Sentry adapter (artifact: kotlintrace-sentry)
+│   ├── build.gradle.kts
+│   ├── api/kotlintrace-sentry.api          # BCV dump
+│   └── src/
+│       ├── commonMain/kotlin/dev/kotlintrace/sentry/
+│       │   ├── SentryBackend.kt             # KotlinTrace.installSentry()
+│       │   └── SentrySink.kt                # expect seam
+│       ├── appleMain/kotlin/dev/kotlintrace/sentry/SentrySink.apple.kt  # cinterop calls
+│       ├── jvmMain/kotlin/dev/kotlintrace/sentry/SentrySink.jvm.kt      # no-op
+│       └── nativeInterop/cinterop/sentry.def       # runtime-lookup shims
+├── kotlintrace-bugsnag/                  # Bugsnag adapter (artifact: kotlintrace-bugsnag)
+│   ├── build.gradle.kts
+│   ├── api/kotlintrace-bugsnag.api           # BCV dump
+│   └── src/
+│       ├── commonMain/kotlin/dev/kotlintrace/bugsnag/
+│       │   ├── BugsnagBackend.kt              # KotlinTrace.installBugsnag()
+│       │   └── BugsnagSink.kt                 # expect seam
+│       ├── appleMain/kotlin/dev/kotlintrace/bugsnag/BugsnagSink.apple.kt  # cinterop calls
+│       ├── jvmMain/kotlin/dev/kotlintrace/bugsnag/BugsnagSink.jvm.kt      # no-op
+│       └── nativeInterop/cinterop/bugsnag.def        # runtime-lookup shims
+└── sample/                # roadmap 2.4 demo (in-repo consumer; not published)
     ├── shared/            # shared Kotlin demo code
     │   ├── build.gradle.kts
     │   └── src/

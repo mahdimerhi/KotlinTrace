@@ -120,9 +120,30 @@
     enables CI must include the BCV+KDoc commit, otherwise `build` fails on
     the missing `.api` dumps.
 
-## Later (roadmap Phase 3/4)
+- [x] **Publish to Maven Central (roadmap 3.2)** — **v0.1.0 live (2026-08-06)**
+  - Coordinates: `io.github.mahdimerhi:kotlintrace[:crashlytics|sentry|bugsnag]:0.1.0`
+    (+ `-jvm`, `-iosarm64`, `-iosx64`, `-iossimulatorarm64` variants), verified
+    200 on `repo1.maven.org`; deployment state PUBLISHED on the portal.
+  - Namespace: `dev.kotlintrace` rejected by the portal (needs `kotlintrace.dev`
+    DNS TXT) → switched to `io.github.mahdimerhi` (auto-verified via GitHub
+    login). Kotlin packages stay `dev.kotlintrace`.
+  - `gradle/publish.gradle` (Groovy convention): maven-publish + signing +
+    POM/SCM metadata + `centralStaging` repo; sources jars per target
+    (`withSourcesJar(true)` — KGP 2.3 boolean), javadoc jar = Dokka HTML
+    (`dokkaGenerateHtml`; Dokka's Javadoc generator doesn't support KMP).
+  - Signing: 4096-bit RSA key `22F6AFEE9974A188` (revocation cert in
+    `~/.gnupg/openpgp-revocs.d/`); key rides env vars
+    (`ORG_GRADLE_PROJECT_signingKey` / `signingPassword` in `~/.zshrc`) —
+    `gradle.properties` escaping breaks armored newlines. Public key uploaded
+    to keys.openpgp.org.
+  - Release flow: `./gradlew assembleCentralBundle` → `scripts/publish-central.sh`
+    (needs `SONATYPE_TOKEN`). Gotchas encoded in the script: upload returns the
+    deploymentId as plain text; status is a POST (GET 500s); staging dir must be
+    wiped before re-assembling (`cleanCentralStaging` task) or stale
+    namespace artifacts poison the bundle.
 
-- [ ] Publish pipeline to Maven Central (3.2)
+## Later (roadmap Phase 4)
+
 - [ ] Android/JVM targets (4.1)
 - [ ] Coroutine diagnostic module (4.2)
 - [ ] OTel-compatible export (4.3)
