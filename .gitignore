@@ -21,3 +21,6 @@ node_modules/
 
 # Firebase config is a secret; user drops it into sample/ios/
 GoogleService-Info.plist
+
+# OpenCode session recovery files (session id after `ses` varies)
+session-ses_*.md
