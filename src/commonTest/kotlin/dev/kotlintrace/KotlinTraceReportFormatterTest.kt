@@ -28,20 +28,14 @@ class KotlinTraceReportFormatterTest {
     }
 
     @Test
-    fun nativeFramesPassThroughAsRawSymbols() {
+    fun nativeFramesAreDroppedWhenDemanglingIsEnabled() {
         val trace = """
             kotlin.IllegalStateException: boom 42
                 at 8   main.kexe   0x10207d163   Init_and_run_start + 99
                 at 9   dyld   0x18dad3beb   start + 6687
         """.trimIndent()
 
-        assertEquals(
-            listOf(
-                KotlinTraceReportFrame(symbol = "at 8   main.kexe   0x10207d163   Init_and_run_start + 99", file = null, line = null),
-                KotlinTraceReportFrame(symbol = "at 9   dyld   0x18dad3beb   start + 6687", file = null, line = null),
-            ),
-            formatter.formatStackTrace(trace),
-        )
+        assertEquals(emptyList(), formatter.formatStackTrace(trace))
     }
 
     @Test
@@ -105,10 +99,42 @@ class KotlinTraceReportFormatterTest {
 
         assertEquals(
             listOf(
-                KotlinTraceReportFrame(symbol = "kotlin.Throwable.<init>", file = null, line = null),
                 KotlinTraceReportFrame(symbol = "dev.kotlintrace.sample.CrashBot.crash", file = null, line = null),
                 KotlinTraceReportFrame(symbol = "dev.kotlintrace.sample.crashOnBackgroundThread\$crashTrampoline", file = null, line = null),
-                KotlinTraceReportFrame(symbol = "at 11  libsystem_pthread.dylib             0x1004d267f        _pthread_start + 103", file = null, line = null),
+            ),
+            formatter.formatStackTrace(trace),
+        )
+    }
+
+    @Test
+    fun bootstrapFramesAreDroppedWhenDemanglingIsEnabled() {
+        val trace = """
+            kotlin.IllegalStateException: boom
+                at 0   KotlinTraceSample.debug.dylib       0x100d4d377        kfun:kotlin.Throwable#<init>(kotlin.String?){} + 99
+                at 1   KotlinTraceSample.debug.dylib       0x100d4d400        kfun:kotlin.Exception#<init>(kotlin.String?){} + 80
+                at 2   KotlinTraceSample.debug.dylib       0x100d4d488        kfun:kotlin.IllegalStateException#<init>(kotlin.String?){} + 61
+                at 3   KotlinTraceSample.debug.dylib       0x100d4d4f0        kfun:kotlin.Function0#invoke(){}1:0-trampoline + 92
+                at 4   KotlinTraceSample.debug.dylib       0x100d2ca57        kfun:dev.kotlintrace.sample.CrashBot#crash(){}kotlin.Throwable + 159
+        """.trimIndent()
+
+        assertEquals(
+            listOf(
+                KotlinTraceReportFrame(symbol = "dev.kotlintrace.sample.CrashBot.crash", file = null, line = null),
+            ),
+            formatter.formatStackTrace(trace),
+        )
+    }
+
+    @Test
+    fun appConstructorFramesAreKept() {
+        val trace = """
+            kotlin.IllegalStateException: boom
+                at 0   KotlinTraceSample.debug.dylib       0x100d4d377        kfun:dev.kotlintrace.sample.CrashBot#<init>(){} + 33
+        """.trimIndent()
+
+        assertEquals(
+            listOf(
+                KotlinTraceReportFrame(symbol = "dev.kotlintrace.sample.CrashBot.<init>", file = null, line = null),
             ),
             formatter.formatStackTrace(trace),
         )
@@ -122,6 +148,16 @@ class KotlinTraceReportFormatterTest {
 
         assertEquals("IllegalStateException", report.name)
         assertEquals("boom 42", report.reason)
+        // A JVM stack trace contains no kfun: frames, and the default
+        // demangler drops non-demangled frames, so the report is empty here.
+        assertEquals(emptyList(), report.frames)
+    }
+
+    @Test
+    fun rawFormatterPassesThroughJvmFrames() {
+        val throwable = IllegalStateException("boom 42")
+        val report = KotlinTraceReportFormatter(demangler = null).format(throwable)
+
         val frames = report.framesText.split("\n").filter { it.isNotEmpty() }
         assertTrue(frames.isNotEmpty())
         assertTrue(frames.first().startsWith("at dev.kotlintrace"))
