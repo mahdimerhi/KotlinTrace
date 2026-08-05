@@ -8,6 +8,22 @@ import dev.kotlintrace.KotlinTrace
 import dev.kotlintrace.KotlinTraceOptions
 import dev.kotlintrace.KotlinTraceReportFormatter
 
+/**
+ * Enables the Bugsnag backend for [KotlinTrace].
+ *
+ * Registers a reporter that converts the uncaught Kotlin throwable into a
+ * readable Bugsnag event (demangled frames + optional file:line) via the
+ * bugsnag-cocoa SDK already linked in the app, and synchronously persists
+ * and uploads the payload (StoreAndSend + unhandled) before it returns.
+ * The process is terminated by KotlinTrace afterwards, so Bugsnag's own
+ * error detection — which the sample disables — never sees the death.
+ *
+ * Fails fast at startup if the Bugsnag SDK is not linked.
+ *
+ * @param demangle whether mangled `kfun:` symbols are demangled.
+ * @param includeKotlinSourceLocation whether `(File.kt:line)` source info is
+ *   resolved and attached to frames.
+ */
 public fun KotlinTrace.installBugsnag(
     demangle: Boolean = true,
     includeKotlinSourceLocation: Boolean = true,

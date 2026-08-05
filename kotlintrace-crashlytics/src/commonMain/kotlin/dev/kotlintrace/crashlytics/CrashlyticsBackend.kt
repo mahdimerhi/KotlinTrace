@@ -8,6 +8,22 @@ import dev.kotlintrace.KotlinTrace
 import dev.kotlintrace.KotlinTraceOptions
 import dev.kotlintrace.KotlinTraceReportFormatter
 
+/**
+ * Enables the Crashlytics backend for [KotlinTrace].
+ *
+ * Registers a reporter that converts the uncaught Kotlin throwable into a
+ * readable Crashlytics non-fatal recorded exception (demangled frames +
+ * optional file:line) via the Firebase Crashlytics SDK already linked in the
+ * app, and returns. The process is terminated by KotlinTrace afterwards, so
+ * Crashlytics' own native crash handler — which cannot be disabled and would
+ * add a duplicate mangled SIGABRT event — never sees the death.
+ *
+ * Fails fast at startup if Firebase Crashlytics is not linked.
+ *
+ * @param demangle whether mangled `kfun:` symbols are demangled.
+ * @param includeKotlinSourceLocation whether `(File.kt:line)` source info is
+ *   resolved and attached to frames.
+ */
 public fun KotlinTrace.installCrashlytics(
     demangle: Boolean = true,
     includeKotlinSourceLocation: Boolean = true,

@@ -2,6 +2,14 @@
 
 package dev.kotlintrace
 
+/**
+ * The [KotlinTraceDemangler] shipped with KotlinTrace.
+ *
+ * Understands the Kotlin/Native runtime frame format and the plain
+ * `kfun:` shape emitted by older toolchains and vendor reports, and maps
+ * them to declaring class, function name and `(File.kt:line)` source
+ * location.
+ */
 public class DefaultKotlinTraceDemangler : KotlinTraceDemangler {
 
     // Real Kotlin/Native runtime format, e.g.:
