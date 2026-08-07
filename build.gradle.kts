@@ -30,6 +30,9 @@ tasks.register<Zip>("assembleCentralBundle") {
     dependsOn(":publishAllPublicationsToCentralStagingRepository")
     published.forEach { dependsOn("${it.path}:publishAllPublicationsToCentralStagingRepository") }
     from(layout.buildDirectory.dir("central-staging"))
+    // Central counts EVERY file toward the monthly 1000-file limit; checksums
+    // are optional (only PGP signatures are required), so don't ship them.
+    exclude("**/*.md5", "**/*.sha1", "**/*.sha256", "**/*.sha512")
     archiveFileName.set("kotlintrace-central-bundle.zip")
     destinationDirectory.set(layout.buildDirectory.dir("central"))
 }

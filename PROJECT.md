@@ -409,6 +409,12 @@ frames, mechanism `kotlintrace`, environment `simulator-demo` — **met
   - A Gradle signGradle task evaluates `signatory.keyId` → the in-memory PGP key
     must be well-formed (newlines can't survive `gradle.properties` escaping, so
     the key rides environment variables).
+  - **Monthly 1000-file limit** (Central Publishing Limits, soft phase since
+    2026-06; enforcement 2026-08-11): Central counts *every* file (signatures,
+    checksums, sources, javadocs). Checksums are optional (only PGP signatures
+    are required), so `assembleCentralBundle` excludes `*.md5/*.sha1/*.sha256/
+    *.sha512` — 1263 files → 287 for the v0.1.0 bundle. Watch the Usage Center
+    (`central.sonatype.com/publishing/usage`) before each release.
 
 ## Phase 4 — Expansion (post-MVP, optional)
 
